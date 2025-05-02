@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import Image from 'next/image'; // Import next/image
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -397,7 +398,17 @@ export default function Home() {
     <div className="flex flex-col md:flex-row min-h-screen bg-background text-foreground pointillism">
       {/* Left Column (Info & Instructions) - 40% width */}
       <div className="w-full md:w-2/5 p-6 md:p-8 border-r border-border flex flex-col space-y-6 glass">
-        <h1 className="text-3xl font-bold mb-4">TestLock</h1>
+         {/* Replaced h1 with Image component */}
+         <div className="mb-4">
+           <Image
+             src="https://picsum.photos/200/50" // Placeholder image URL
+             alt="TestLock Logo"
+             width={200}
+             height={50}
+             data-ai-hint="logo abstract" // Hint for image search
+             className="object-contain" // Adjust as needed
+           />
+         </div>
 
         <Card className="glass">
          <CardHeader>

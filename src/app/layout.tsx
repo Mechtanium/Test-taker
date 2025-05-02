@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'TestLock',
+  title: 'Test taker', // Changed title here
   description: 'Secure Browser Testing Environment',
 };
 
@@ -26,7 +26,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      {/* Remove onCopy, onCut, onPaste from here */}
+      {/* Event handlers removed to fix the error */}
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
