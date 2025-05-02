@@ -415,14 +415,12 @@ export default function Home() {
       <div className="w-full md:w-2/5 p-6 md:p-8 border-r border-border flex flex-col space-y-6 glass">
          {/* Replaced h1 with Image component */}
          <div className="mb-4">
-           <Image
-             src="https://picsum.photos/200/50" // Placeholder image URL
-             alt="Test taker Logo" // Changed alt text
-             width={200}
-             height={50}
-             data-ai-hint="logo abstract" // Hint for image search
-             className="object-contain" // Adjust as needed
-           />
+             {/* ANNAH.AI Logo SVG */}
+            <svg width="200" height="50" viewBox="0 0 200 50" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M37.5 50L25.125 0H12.375L0 50H10.6875L13.5938 41.0938H23.9062L26.8125 50H37.5ZM15.1875 33.1875L18.75 22.3125L22.3125 33.1875H15.1875Z" fill="#38C68B"/>
+              <path d="M190.625 0H162.5L149.688 50H160.312L162.5 43.3125H176.562L178.75 50H189.375L176.562 0H190.625ZM174.688 35.5625H164.375L172.812 2.8125L174.688 35.5625Z" fill="#38C68B"/>
+              <path d="M200 0H189.375V50H200V0Z" fill="#38C68B"/>
+            </svg>
          </div>
 
         <Card className="glass">
@@ -570,3 +568,5 @@ export default function Home() {
     </div>
   );
 }
+
+    
