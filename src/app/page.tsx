@@ -61,6 +61,17 @@ export default function Home() {
 
   const penaltyTriggeredRef = useRef(false); // Ref to track if penalty was triggered
 
+  const handleAnswerEventPrevent = (e: React.ClipboardEvent<HTMLTextAreaElement>, action: string) => {
+    e.preventDefault();
+    toast({
+      title: 'Action Disabled',
+      description: `${action}ing is disabled for the answer box.`,
+      variant: 'destructive',
+      duration: 2000,
+    });
+  };
+
+
   const handlePenalty = useCallback((reason: string) => {
     if (penaltyTriggeredRef.current || !testStarted || testFinished) return; // Prevent multiple triggers or triggering before/after test
 
@@ -105,7 +116,7 @@ export default function Home() {
         document.exitFullscreen().catch(err => console.error("Error exiting fullscreen:", err));
     }
 
-  }, [answers, currentQuestionIndex, questions, answer, toast, testStarted, testFinished]);
+  }, [answers, currentQuestionIndex, questions, answer, toast, testStarted, testFinished, studentEmail, matriculationNumber]); // Added studentEmail and matriculationNumber
 
 
     // Effect for message listener
@@ -140,6 +151,7 @@ export default function Home() {
                   { _id: 'q2', _owner: 'test', query: 'What is the capital of France?\n\nThis is a longer question to test scrolling behavior.\nIt continues on multiple lines.\nLine 4.\nLine 5.\nLine 6.\nLine 7.\nLine 8.\nLine 9.\nLine 10.', test_id: 't1', type: 'geo', dur_millis: 10000 },
                   { _id: 'q3', _owner: 'test', query: 'Describe React hooks.', test_id: 't1', type: 'cs', dur_millis: 30000 },
               ];
+              // Use handleMessage to process dummy data consistently
               handleMessage({ data: dummyQuestions } as MessageEvent);
          }, 1000);
      }
@@ -152,7 +164,8 @@ export default function Home() {
         clearInterval(timerRef.current);
       }
     };
-  }, []); // Empty dependency array ensures this runs only once on mount
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- Only run on mount
+  }, []);
 
     // Security Listeners Setup Effect (Conditional)
   useEffect(() => {
@@ -237,6 +250,58 @@ export default function Home() {
   }, [testStarted, testFinished, handlePenalty]);
 
 
+  // Moved handleNextQuestion definition before the timer useEffect that uses it
+  const handleNextQuestion = useCallback(() => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+
+     // Save current answer before moving
+     if (currentQuestionIndex >= 0 && currentQuestionIndex < questions.length) {
+        const timeTaken = Date.now() - startTimeRef.current;
+        const currentQuestionId = questions[currentQuestionIndex]._id;
+         // Avoid duplicate entries if penalty already saved it or test finished auto-saved
+        if (!answers.some(a => a.questionId === currentQuestionId)) {
+            setAnswers((prev) => [...prev, { questionId: currentQuestionId, answer, timeTaken }]);
+        }
+     }
+
+    setAnswer(''); // Clear answer field for next question
+
+    const nextIndex = currentQuestionIndex + 1;
+    if (nextIndex < questions.length) {
+      setCurrentQuestionIndex(nextIndex);
+    } else {
+        // Check for penalty questions
+         if (penaltyQuestions.length > 0) {
+            const nextPenalty = penaltyQuestions[0];
+            setQuestions(prev => [...prev, nextPenalty]); // Add penalty question to the main list
+            setPenaltyQuestions(prev => prev.slice(1)); // Remove from penalty queue
+            setCurrentQuestionIndex(nextIndex); // Move to the newly added penalty question
+         } else {
+             // No more questions or penalties
+              setTestFinished(true);
+              setCurrentQuestionIndex(-1); // Indicate no active question
+
+              // Submit final answers here in a real app
+              // Use the latest answers state by passing a function to setAnswers
+              setAnswers(currentAnswers => {
+                 console.log('Test finished normally. Final answers:', currentAnswers);
+                 // Example: postData('/submit-test', { studentEmail, matriculationNumber, answers: currentAnswers });
+                 return currentAnswers; // Return the unchanged state
+              });
+
+
+              // Attempt to exit fullscreen gracefully if possible
+             if (document.fullscreenElement) {
+                 document.exitFullscreen().catch(err => console.error("Error exiting fullscreen:", err));
+             }
+         }
+    }
+    // Dependencies should reflect state read *inside* the useCallback
+  }, [currentQuestionIndex, questions, answer, answers, penaltyQuestions, studentEmail, matriculationNumber]); // Added studentEmail, matriculationNumber
+
   // Timer Effect
   useEffect(() => {
     if (testStarted && currentQuestionIndex !== -1 && !testFinished) {
@@ -253,8 +318,10 @@ export default function Home() {
                 const remaining = duration - elapsed;
 
                 if (remaining <= 0) {
-                    clearInterval(timerRef.current!); // Clear immediately
-                    timerRef.current = null;
+                    if (timerRef.current) { // Check if timer still exists before clearing
+                        clearInterval(timerRef.current);
+                        timerRef.current = null;
+                    }
                     handleNextQuestion(); // Auto-advance when time is up
                 } else {
                     setTimeLeft(remaining);
@@ -283,60 +350,8 @@ export default function Home() {
       }
     };
      // Ensure effect re-runs when index changes or test starts/finishes
-     // Removed handleNextQuestion from deps as it causes infinite loops if state inside it changes
-  }, [testStarted, currentQuestionIndex, testFinished, questions]);
+  }, [testStarted, currentQuestionIndex, testFinished, questions, handleNextQuestion]); // handleNextQuestion is now defined above
 
-  const handleNextQuestion = useCallback(() => {
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-
-     // Save current answer before moving
-     if (currentQuestionIndex >= 0 && currentQuestionIndex < questions.length) {
-        const timeTaken = Date.now() - startTimeRef.current;
-        const currentQuestionId = questions[currentQuestionIndex]._id;
-         // Avoid duplicate entries if penalty already saved it
-        if (!answers.some(a => a.questionId === currentQuestionId)) {
-            setAnswers((prev) => [...prev, { questionId: currentQuestionId, answer, timeTaken }]);
-        }
-     }
-
-    setAnswer(''); // Clear answer field for next question
-
-    const nextIndex = currentQuestionIndex + 1;
-    if (nextIndex < questions.length) {
-      setCurrentQuestionIndex(nextIndex);
-    } else {
-        // Check for penalty questions
-         if (penaltyQuestions.length > 0) {
-            const nextPenalty = penaltyQuestions[0];
-            setQuestions(prev => [...prev, nextPenalty]); // Add penalty question to the main list
-            setPenaltyQuestions(prev => prev.slice(1)); // Remove from penalty queue
-            setCurrentQuestionIndex(nextIndex); // Move to the newly added penalty question
-         } else {
-             // No more questions or penalties
-              setTestFinished(true);
-              setCurrentQuestionIndex(-1); // Indicate no active question
-              // Ensure the last answer is captured if the test ends normally here
-             const lastQuestionId = questions[currentQuestionIndex]?._id;
-             const lastTimeTaken = Date.now() - startTimeRef.current;
-             const finalAnswers = answers.some(a => a.questionId === lastQuestionId)
-                ? answers // If already saved (e.g., by penalty), use existing
-                : [...answers, { questionId: lastQuestionId, answer, timeTaken: lastTimeTaken }]; // Otherwise, add the last one
-
-              console.log('Test finished. Final answers:', finalAnswers);
-              // Submit final answers here in a real app
-              // Example: postData('/submit-test', { studentEmail, matriculationNumber, answers: finalAnswers });
-
-              // Attempt to exit fullscreen gracefully if possible
-             if (document.fullscreenElement) {
-                 document.exitFullscreen().catch(err => console.error("Error exiting fullscreen:", err));
-             }
-         }
-    }
-    // Dependencies should reflect state read *inside* the useCallback
-  }, [currentQuestionIndex, questions, answer, answers, penaltyQuestions]);
 
    const handleAccept = async () => {
         if (!studentEmail || !matriculationNumber) {
@@ -402,7 +417,7 @@ export default function Home() {
          <div className="mb-4">
            <Image
              src="https://picsum.photos/200/50" // Placeholder image URL
-             alt="TestLock Logo"
+             alt="Test taker Logo" // Changed alt text
              width={200}
              height={50}
              data-ai-hint="logo abstract" // Hint for image search
@@ -423,7 +438,6 @@ export default function Home() {
                   value={studentEmail}
                   onChange={(e) => setStudentEmail(e.target.value)}
                   disabled={testStarted || isAccepting || testFinished}
-                  // Removed copy/paste handlers
                   className="bg-white/80 dark:bg-black/30"
                 />
               </div>
@@ -435,7 +449,6 @@ export default function Home() {
                   value={matriculationNumber}
                   onChange={(e) => setMatriculationNumber(e.target.value)}
                   disabled={testStarted || isAccepting || testFinished}
-                   // Removed copy/paste handlers
                   className="bg-white/80 dark:bg-black/30"
                 />
               </div>
@@ -506,7 +519,9 @@ export default function Home() {
                          placeholder="Type your answer here..."
                          value={answer}
                          onChange={(e) => setAnswer(e.target.value)}
-                         // Removed copy/paste handlers
+                         onCopy={(e) => handleAnswerEventPrevent(e, 'Copy')}
+                         onCut={(e) => handleAnswerEventPrevent(e, 'Cut')}
+                         onPaste={(e) => handleAnswerEventPrevent(e, 'Paste')}
                          className="min-h-[150px] text-base bg-white/80 dark:bg-black/30 flex-shrink-0" // Added flex-shrink-0
                          aria-label="Answer input area"
                       />
