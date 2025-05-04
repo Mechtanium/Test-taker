@@ -4,7 +4,22 @@
 
 body {
   font-family: Arial, Helvetica, sans-serif;
+  /* Allow scrolling on body for cases where content exceeds viewport with keyboard */
+  overflow-y: auto;
 }
+
+html, body, #__next {
+  /* Ensure these elements take full height */
+  height: 100%;
+}
+
+main {
+ /* Ensure main can grow and potentially scroll if needed */
+ flex-grow: 1;
+ display: flex;
+ flex-direction: column;
+}
+
 
 @layer base {
   :root {
@@ -86,9 +101,9 @@ body {
   body {
     @apply bg-background text-foreground;
     /* Disable text selection globally */
-    -webkit-user-select: none; /* Safari */
-    -ms-user-select: none; /* IE 10 and IE 11 */
-    user-select: none; /* Standard syntax */
+    /* -webkit-user-select: none; */ /* Safari */ /* Commented out to test if it interferes */
+    /* -ms-user-select: none; */ /* IE 10 and IE 11 */ /* Commented out to test if it interferes */
+    /* user-select: none; */ /* Standard syntax */ /* Commented out to test if it interferes */
   }
    /* Allow text selection only for specific input/textarea elements */
   input[type="text"],
