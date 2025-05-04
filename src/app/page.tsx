@@ -320,23 +320,21 @@ export default function Home() {
 
   // Timer Effect
   useEffect(() => {
-    if (testStarted && currentQuestionIndex !== -1 && !testFinished) {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-      }
+    let intervalId: NodeJS.Timeout | null = null;
 
+    if (testStarted && currentQuestionIndex !== -1 && !testFinished) {
       startTimeRef.current = Date.now(); // Record start time for the question
       const duration = questions[currentQuestionIndex]?.dur_millis;
       if (duration > 0) {
         setTimeLeft(duration); // Set initial time in milliseconds
-        timerRef.current = setInterval(() => {
+
+        intervalId = setInterval(() => {
           const elapsed = Date.now() - startTimeRef.current;
           const remaining = duration - elapsed;
 
           if (remaining <= 0) {
-            if (timerRef.current) { // Check if timer still exists before clearing
-              clearInterval(timerRef.current);
-              timerRef.current = null;
+            if (intervalId) { // Check if timer still exists before clearing
+              clearInterval(intervalId);
             }
             handleNextQuestion(); // Auto-advance when time is up
           } else {
@@ -355,17 +353,17 @@ export default function Home() {
       scrollInputIntoView();
 
 
-    } else if (timerRef.current) {
+    } else {
       // Clear timer if test not started, finished, or no question selected
-      clearInterval(timerRef.current);
-      timerRef.current = null;
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
     }
 
     // Cleanup function for the interval
     return () => {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-        timerRef.current = null; // Ensure ref is cleared on cleanup
+      if (intervalId) {
+        clearInterval(intervalId);
       }
     };
     // Ensure effect re-runs when index changes or test starts/finishes
@@ -588,3 +586,4 @@ export default function Home() {
     </div>
   );
 }
+
