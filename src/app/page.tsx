@@ -10,6 +10,7 @@ import { Progress } from '@/components/ui/progress';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
+import AnnahAiLogo from '@/components/annah-ai-logo'; // Import the logo component
 
 interface Question {
   _id: string;
@@ -58,8 +59,14 @@ export default function Home() {
   const initialViewportHeightRef = useRef<number>(0);
   const { toast } = useToast();
   const answerTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null); // Ref for the main container
+  const rightColumnRef = useRef<HTMLDivElement>(null); // Ref for the right column
 
   const penaltyTriggeredRef = useRef(false); // Ref to track if penalty was triggered
+
+  // Ref to hold the latest handleNextQuestion callback
+  const handleNextQuestionRef = useRef<() => void>(() => {});
+
 
   const handleAnswerEventPrevent = (e: React.ClipboardEvent<HTMLTextAreaElement>, action: string) => {
     e.preventDefault();
@@ -102,9 +109,10 @@ export default function Home() {
       }
     }
 
-    console.log('Submitting penalized answers:', finalAnswers);
-    // In a real app, send `finalAnswers` and student info to the backend here.
-    // Example: postData('/submit-penalized-test', { studentEmail, matriculationNumber, answers: finalAnswers });
+    console.log('Submitting penalized answers:', { studentEmail, matriculationNumber, answers: finalAnswers });
+    // In a real app, send data to the backend here.
+    // Example: fetch('/api/submit-penalized-test', { method: 'POST', body: JSON.stringify({ studentEmail, matriculationNumber, answers: finalAnswers }) });
+
 
     setTestFinished(true); // Mark test as finished
     setCurrentQuestionIndex(-1); // Stop displaying questions
@@ -198,7 +206,9 @@ export default function Home() {
 
            // Ignore resize if it's likely due to orientation change or virtual keyboard
            // A simple check: if width decreased significantly but height increased, it might be virtual keyboard
-           const likelyKeyboard = initialViewportHeightRef.current > 0 && currentHeight > initialViewportHeightRef.current && currentWidth < window.innerWidth;
+           const likelyKeyboard = initialViewportHeightRef.current > 0 && currentHeight < initialViewportHeightRef.current; // Check if height decreased
+
+           // console.log(`Resize check: cH:${currentHeight}, iH:${initialViewportHeightRef.current}, oC:${orientationChanged}, lK:${likelyKeyboard}, iUS:${isUnexpectedSize}`);
 
 
            if (initialViewportHeightRef.current > 0 && !orientationChanged && !likelyKeyboard && isUnexpectedSize) {
@@ -207,12 +217,18 @@ export default function Home() {
            } else {
                 if (orientationChanged) {
                     console.log('Orientation change detected, ignoring resize penalty.');
+                    // Update reference height on orientation change
+                    initialViewportHeightRef.current = currentHeight;
                 }
                 if (likelyKeyboard) {
                     console.log('Possible virtual keyboard detected, ignoring resize penalty.');
+                    // We might want to scroll the focused element into view here if needed
+                    answerTextareaRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                } else if (!orientationChanged) {
+                     // Update ref height only if not keyboard or orientation change
+                     // This helps establish a baseline for non-keyboard resizes
+                    // initialViewportHeightRef.current = currentHeight;
                 }
-                // Update reference height/width on orientation change or first valid resize
-                initialViewportHeightRef.current = currentHeight;
            }
 
       };
@@ -250,107 +266,120 @@ export default function Home() {
   }, [testStarted, testFinished, handlePenalty]);
 
 
-  // Moved handleNextQuestion definition before the timer useEffect that uses it
+  // Define the function that handles moving to the next question
   const handleNextQuestion = useCallback(() => {
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
+      if (timerRef.current) {
+          clearInterval(timerRef.current);
+          timerRef.current = null;
+      }
 
-     // Save current answer before moving
-     if (currentQuestionIndex >= 0 && currentQuestionIndex < questions.length) {
-        const timeTaken = Date.now() - startTimeRef.current;
-        const currentQuestionId = questions[currentQuestionIndex]._id;
-         // Avoid duplicate entries if penalty already saved it or test finished auto-saved
-        if (!answers.some(a => a.questionId === currentQuestionId)) {
-            setAnswers((prev) => [...prev, { questionId: currentQuestionId, answer, timeTaken }]);
-        }
-     }
+      // Save current answer before moving
+      if (currentQuestionIndex >= 0 && currentQuestionIndex < questions.length) {
+          const timeTaken = Date.now() - startTimeRef.current;
+          const currentQuestionId = questions[currentQuestionIndex]._id;
+          // Avoid duplicate entries if penalty already saved it or test finished auto-saved
+          // Use functional update to ensure we have the latest `answers` state
+          setAnswers((prevAnswers) => {
+              if (!prevAnswers.some(a => a.questionId === currentQuestionId)) {
+                  return [...prevAnswers, { questionId: currentQuestionId, answer, timeTaken }];
+              }
+              return prevAnswers;
+          });
+      }
 
-    setAnswer(''); // Clear answer field for next question
+      setAnswer(''); // Clear answer field for next question
 
-    const nextIndex = currentQuestionIndex + 1;
-    if (nextIndex < questions.length) {
-      setCurrentQuestionIndex(nextIndex);
-    } else {
-        // Check for penalty questions
-         if (penaltyQuestions.length > 0) {
-            const nextPenalty = penaltyQuestions[0];
-            setQuestions(prev => [...prev, nextPenalty]); // Add penalty question to the main list
-            setPenaltyQuestions(prev => prev.slice(1)); // Remove from penalty queue
-            setCurrentQuestionIndex(nextIndex); // Move to the newly added penalty question
-         } else {
-             // No more questions or penalties
+      const nextIndex = currentQuestionIndex + 1;
+
+      if (nextIndex < questions.length) {
+          setCurrentQuestionIndex(nextIndex);
+      } else {
+          // Check for penalty questions
+          if (penaltyQuestions.length > 0) {
+              const nextPenalty = penaltyQuestions[0];
+              setQuestions(prev => [...prev, nextPenalty]); // Add penalty question to the main list
+              setPenaltyQuestions(prev => prev.slice(1)); // Remove from penalty queue
+              setCurrentQuestionIndex(nextIndex); // Move to the newly added penalty question
+          } else {
+              // No more questions or penalties
               setTestFinished(true);
               setCurrentQuestionIndex(-1); // Indicate no active question
 
               // Submit final answers here in a real app
               // Use the latest answers state by passing a function to setAnswers
               setAnswers(currentAnswers => {
-                 console.log('Test finished normally. Final answers:', currentAnswers);
-                 // Example: postData('/submit-test', { studentEmail, matriculationNumber, answers: currentAnswers });
-                 return currentAnswers; // Return the unchanged state
+                  console.log('Test finished normally. Final answers:', { studentEmail, matriculationNumber, answers: currentAnswers });
+                  // Example: fetch('/api/submit-test', { method: 'POST', body: JSON.stringify({ studentEmail, matriculationNumber, answers: currentAnswers }) });
+                  return currentAnswers; // Return the unchanged state
               });
 
 
               // Attempt to exit fullscreen gracefully if possible
-             if (document.fullscreenElement) {
-                 document.exitFullscreen().catch(err => console.error("Error exiting fullscreen:", err));
-             }
-         }
-    }
-    // Dependencies should reflect state read *inside* the useCallback
-  }, [currentQuestionIndex, questions, answer, answers, penaltyQuestions, studentEmail, matriculationNumber]); // Added studentEmail, matriculationNumber
+              if (document.fullscreenElement) {
+                  document.exitFullscreen().catch(err => console.error("Error exiting fullscreen:", err));
+              }
+          }
+      }
+  }, [currentQuestionIndex, questions, answer, penaltyQuestions, studentEmail, matriculationNumber]);
+
+  // Update the ref whenever handleNextQuestion changes
+  useEffect(() => {
+    handleNextQuestionRef.current = handleNextQuestion;
+  }, [handleNextQuestion]);
 
   // Timer Effect
   useEffect(() => {
-    if (testStarted && currentQuestionIndex !== -1 && !testFinished) {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
+      if (testStarted && currentQuestionIndex !== -1 && !testFinished) {
+          if (timerRef.current) {
+              clearInterval(timerRef.current);
+          }
+
+          startTimeRef.current = Date.now(); // Record start time for the question
+          const duration = questions[currentQuestionIndex]?.dur_millis;
+
+          if (duration > 0) {
+              setTimeLeft(duration); // Set initial time in milliseconds
+
+              timerRef.current = setInterval(() => {
+                  const elapsed = Date.now() - startTimeRef.current;
+                  const remaining = duration - elapsed;
+
+                  if (remaining <= 0) {
+                      if (timerRef.current) {
+                          clearInterval(timerRef.current);
+                          timerRef.current = null;
+                      }
+                      // Use the function from the ref
+                      handleNextQuestionRef.current(); // Auto-advance when time is up
+                  } else {
+                      setTimeLeft(remaining);
+                  }
+              }, 100); // Update timer frequently for smoother display
+          } else {
+              // Handle questions with no duration? Maybe infinite time?
+              setTimeLeft(-1); // Indicate infinite time or handle as error
+              console.warn(`Question ${currentQuestionIndex} has invalid duration: ${duration}`);
+          }
+
+          // Auto-focus textarea
+          answerTextareaRef.current?.focus();
+
+      } else if (timerRef.current) {
+          // Clear timer if test not started, finished, or no question selected
+          clearInterval(timerRef.current);
+          timerRef.current = null;
       }
 
-      startTimeRef.current = Date.now(); // Record start time for the question
-      const duration = questions[currentQuestionIndex]?.dur_millis;
-      if (duration > 0) {
-          setTimeLeft(duration); // Set initial time in milliseconds
-           timerRef.current = setInterval(() => {
-                const elapsed = Date.now() - startTimeRef.current;
-                const remaining = duration - elapsed;
-
-                if (remaining <= 0) {
-                    if (timerRef.current) { // Check if timer still exists before clearing
-                        clearInterval(timerRef.current);
-                        timerRef.current = null;
-                    }
-                    handleNextQuestion(); // Auto-advance when time is up
-                } else {
-                    setTimeLeft(remaining);
-                }
-           }, 100); // Update timer frequently for smoother display
-      } else {
-          // Handle questions with no duration? Maybe infinite time?
-           setTimeLeft(-1); // Indicate infinite time or handle as error
-           console.warn(`Question ${currentQuestionIndex} has invalid duration: ${duration}`);
-      }
-
-        // Auto-focus textarea
-        answerTextareaRef.current?.focus();
-
-    } else if (timerRef.current) {
-        // Clear timer if test not started, finished, or no question selected
-        clearInterval(timerRef.current);
-        timerRef.current = null;
-    }
-
-    // Cleanup function for the interval
-    return () => {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-         timerRef.current = null; // Ensure ref is cleared on cleanup
-      }
-    };
-     // Ensure effect re-runs when index changes or test starts/finishes
-  }, [testStarted, currentQuestionIndex, testFinished, questions, handleNextQuestion]); // handleNextQuestion is now defined above
+      // Cleanup function for the interval
+      return () => {
+          if (timerRef.current) {
+              clearInterval(timerRef.current);
+              timerRef.current = null; // Ensure ref is cleared on cleanup
+          }
+      };
+      // Only depend on variables that control *starting* or *stopping* the timer.
+      // handleNextQuestion is now accessed via ref inside the interval.
+  }, [testStarted, currentQuestionIndex, testFinished, questions]);
 
 
    const handleAccept = async () => {
@@ -380,6 +409,7 @@ export default function Home() {
               setCurrentQuestionIndex(0); // Start with the first question
               setIsAccepting(false); // Hide loading state
               console.log('Test started after fullscreen.');
+              initialViewportHeightRef.current = window.innerHeight; // Update initial height *after* fullscreen
           }, 500); // Adjust delay if needed
 
         } catch (err) {
@@ -410,19 +440,12 @@ export default function Home() {
 
 
   return (
-    <div className="flex flex-col md:flex-row min-h-screen bg-background text-foreground pointillism">
+     // Added ref and padding-bottom for keyboard avoidance
+    <div ref={containerRef} className="flex flex-col md:flex-row min-h-screen bg-background text-foreground pointillism pb-[200px] md:pb-0">
       {/* Left Column (Info & Instructions) - 40% width */}
       <div className="w-full md:w-2/5 p-6 md:p-8 border-r border-border flex flex-col space-y-6 glass">
-         {/* Replaced h1 with Image component */}
          <div className="mb-4">
-           <Image
-             src="https://picsum.photos/200/50" // Placeholder image URL
-             alt="Test taker Logo" // Changed alt text
-             width={200}
-             height={50}
-             data-ai-hint="logo abstract" // Hint for image search
-             className="object-contain" // Adjust as needed
-           />
+            <AnnahAiLogo className="w-[200px] h-auto" /> {/* Use the SVG component */}
          </div>
 
         <Card className="glass">
@@ -485,7 +508,7 @@ export default function Home() {
       </div>
 
       {/* Right Column (Questions & Timer) - 60% width */}
-      <div className="w-full md:w-3/5 p-6 md:p-8 flex flex-col">
+      <div ref={rightColumnRef} className="w-full md:w-3/5 p-6 md:p-8 flex flex-col">
         {testStarted && !testFinished && currentQuestion ? (
           <div className="flex flex-col h-full fade-in space-y-4">
 
@@ -519,6 +542,7 @@ export default function Home() {
                          placeholder="Type your answer here..."
                          value={answer}
                          onChange={(e) => setAnswer(e.target.value)}
+                         onFocus={(e) => e.target.scrollIntoView({ behavior: 'smooth', block: 'center' })} // Scroll into view on focus
                          onCopy={(e) => handleAnswerEventPrevent(e, 'Copy')}
                          onCut={(e) => handleAnswerEventPrevent(e, 'Cut')}
                          onPaste={(e) => handleAnswerEventPrevent(e, 'Paste')}
@@ -530,7 +554,7 @@ export default function Home() {
 
 
             <Button
-              onClick={handleNextQuestion}
+              onClick={handleNextQuestion} // Use the stable function reference
               className="w-full md:w-auto self-end bg-accent text-accent-foreground hover:bg-accent/90 py-3 px-6 mt-4" // Added mt-4 for spacing
               disabled={currentQuestionIndex >= questions.length} // Disable if no more questions
               >
