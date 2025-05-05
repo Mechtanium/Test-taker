@@ -39,3 +39,8 @@ next-env.d.ts
 
 .genkit/*
 .env*
+
+# firebase
+/.firebase
+.firebaserc
+firebase.json
