@@ -67,14 +67,33 @@ export default function Home() {
   const handleNextQuestionRef = useRef<() => void>(() => {});
 
 
-  const handleAnswerEventPrevent = (e: React.ClipboardEvent<HTMLTextAreaElement> | React.DragEvent<HTMLTextAreaElement>, action: string) => {
-    e.preventDefault();
-    toast({
-      title: 'Action Disabled',
-      description: `${action}ing is disabled for the answer box.`,
-      variant: 'destructive',
-      duration: 2000,
-    });
+  const handleAnswerEventPrevent = (e: React.ClipboardEvent<HTMLTextAreaElement> | React.DragEvent<HTMLTextAreaElement> | React.TouchEvent<HTMLTextAreaElement>, action: string) => {
+    // For touch events, we might need to inspect `e.type` if we want to differentiate
+    // specific touch actions that could lead to paste (like long-press context menu).
+    // However, `preventDefault` on `onTouchStart` or `onTouchMove` if they are part of a paste gesture
+    // might be too broad.
+    // The most reliable way to block paste is usually by intercepting the `paste` event itself.
+    if (e.type === 'paste' || action.toLowerCase() === 'paste') {
+      e.preventDefault();
+      toast({
+        title: 'Action Disabled',
+        description: `Pasting is disabled for the answer box.`,
+        variant: 'destructive',
+        duration: 2000,
+      });
+      return;
+    }
+
+    // For other actions like copy, cut, drag
+    if (e.type === 'copy' || e.type === 'cut' || e.type === 'dragstart' || e.type === 'drop') {
+      e.preventDefault();
+      toast({
+        title: 'Action Disabled',
+        description: `${action}ing is disabled for the answer box.`,
+        variant: 'destructive',
+        duration: 2000,
+      });
+    }
   };
 
 
@@ -144,8 +163,8 @@ export default function Home() {
     const handleMessage = (event: MessageEvent) => {
       // Add origin check for security in a real application
       // if (event.origin !== "expected_origin") return;
-      if (event.data && Array.isArray(event.data) && event.data.length > 0 && event.data[0]?.query) {
-        const receivedQuestions: Question[] = event.data;
+      if (event.data?.type === 'questionsLoaded' && Array.isArray(event.data.questions) && event.data.questions.length > 0 && event.data.questions[0]?.query) {
+        const receivedQuestions: Question[] = event.data.questions;
         setQuestions(shuffleArray([...receivedQuestions])); // Shuffle questions on receive
         setIsLoading(false); // Questions loaded
         console.log('Received questions:', receivedQuestions);
@@ -172,7 +191,7 @@ export default function Home() {
                   { _id: 'q3', query: 'Describe React hooks.', test_id: 't1', type: 'cs', dur_millis: 30000 },
               ];
               // Use handleMessage to process dummy data consistently
-              handleMessage({ data: dummyQuestions } as MessageEvent);
+              handleMessage({ data: { type: 'questionsLoaded', questions: dummyQuestions } } as MessageEvent);
          }, 1000);
      }
 
@@ -291,10 +310,14 @@ export default function Home() {
           const currentQuestionId = questions[currentQuestionIndex]._id;
           // Use functional update to ensure we have the latest `answers` state
           setAnswers((prevAnswers) => {
-              if (!prevAnswers.some(a => a.questionId === currentQuestionId)) {
-                  return [...prevAnswers, { questionId: currentQuestionId, answer, timeTaken }];
+              const existingAnswerIndex = prevAnswers.findIndex(a => a.questionId === currentQuestionId);
+              if (existingAnswerIndex === -1) { // If answer doesn't exist, add it
+                return [...prevAnswers, { questionId: currentQuestionId, answer, timeTaken }];
+              } else { // If answer exists, update it (e.g. if user changes answer and submits early)
+                const updatedAnswers = [...prevAnswers];
+                updatedAnswers[existingAnswerIndex] = { questionId: currentQuestionId, answer, timeTaken };
+                return updatedAnswers;
               }
-              return prevAnswers;
           });
       }
 
@@ -349,16 +372,16 @@ export default function Home() {
 
   // Timer Effect
   useEffect(() => {
-      if (testStarted && currentQuestionIndex !== -1 && !testFinished && questions.length > 0 && currentQuestionIndex < questions.length) { // Added questions checks
-          if (timerRef.current) {
+      if (testStarted && currentQuestionIndex !== -1 && !testFinished && questions.length > 0 && currentQuestionIndex < questions.length) {
+          if (timerRef.current) { // Clear previous timer if any
               clearInterval(timerRef.current);
           }
 
-          startTimeRef.current = Date.now(); // Record start time for the question
+          startTimeRef.current = Date.now();
           const duration = questions[currentQuestionIndex]?.dur_millis;
 
           if (duration > 0) {
-              setTimeLeft(duration); // Set initial time in milliseconds
+              setTimeLeft(duration);
 
               timerRef.current = setInterval(() => {
                   const elapsed = Date.now() - startTimeRef.current;
@@ -369,34 +392,32 @@ export default function Home() {
                           clearInterval(timerRef.current);
                           timerRef.current = null;
                       }
-                      // Use the function from the ref
-                      handleNextQuestionRef.current(); // Auto-advance when time is up
+                      handleNextQuestionRef.current();
                   } else {
                       setTimeLeft(remaining);
                   }
-              }, 100); // Update timer frequently for smoother display
+              }, 100);
           } else {
-              // Handle questions with no duration? Maybe infinite time?
-              setTimeLeft(-1); // Indicate infinite time or handle as error
+              setTimeLeft(-1);
               console.warn(`Question ${currentQuestionIndex} has invalid duration: ${duration}`);
           }
 
-          // Auto-focus textarea
           answerTextareaRef.current?.focus();
 
       } else if (timerRef.current) {
-          // Clear timer if test not started, finished, or no question selected
           clearInterval(timerRef.current);
           timerRef.current = null;
       }
 
-      // Cleanup function for the interval
       return () => {
           if (timerRef.current) {
               clearInterval(timerRef.current);
-              timerRef.current = null; // Ensure ref is cleared on cleanup
+              timerRef.current = null;
           }
       };
+  // Re-run this effect ONLY when the question changes or test state changes.
+  // Do NOT include `answer` or `_timeLeft` or `setTimeLeft` or `handleNextQuestionRef` here
+  // as they would cause the timer to reset on every keystroke or timer tick.
   }, [testStarted, currentQuestionIndex, testFinished, questions]);
 
 
@@ -458,10 +479,13 @@ export default function Home() {
 
 
   return (
-     // Added ref and padding-bottom for keyboard avoidance
-    <div ref={containerRef} className="flex flex-col md:flex-row min-h-screen bg-background text-foreground pointillism pb-[var(--keyboard-offset,0px)] md:pb-0 transition-[padding-bottom] duration-300 ease-in-out">
+    <div 
+      ref={containerRef} 
+      className="flex flex-col md:flex-row h-full w-full bg-background text-foreground pointillism transition-[padding-bottom] duration-300 ease-in-out md:pb-0"
+      // The pb-[var(--keyboard-offset,0px)] will be applied dynamically via JS for mobile
+    >
       {/* Left Column (Info & Instructions) - 40% width */}
-      <div className="w-full md:w-2/5 p-6 md:p-8 border-r border-border flex flex-col space-y-6 glass">
+      <div className="w-full md:w-2/5 p-6 md:p-8 border-r border-border flex flex-col space-y-6 glass overflow-y-auto">
          <div className="mb-4">
             <AnnahAiLogo className="w-[200px] h-auto" /> {/* Use the SVG component */}
          </div>
@@ -526,7 +550,7 @@ export default function Home() {
       </div>
 
       {/* Right Column (Questions & Timer) - 60% width */}
-      <div ref={rightColumnRef} className="w-full md:w-3/5 p-6 md:p-8 flex flex-col">
+      <div ref={rightColumnRef} className="w-full md:w-3/5 p-6 md:p-8 flex flex-col h-full overflow-y-auto">
         {testStarted && !testFinished && currentQuestion ? (
           <div className="flex flex-col h-full fade-in space-y-4">
 
@@ -561,15 +585,33 @@ export default function Home() {
                          value={answer}
                          onChange={(e) => setAnswer(e.target.value)}
                          onFocus={(e) => {
-                            if (containerRef.current && window.visualViewport) {
-                                const keyboardOffset = Math.max(0, window.innerHeight - window.visualViewport.height - 50); // 50px buffer
-                                containerRef.current.style.setProperty('--keyboard-offset', `${keyboardOffset}px`);
+                            if (containerRef.current && window.visualViewport && window.innerWidth < 768) { // Only on mobile
+                                const onVisualViewportChange = () => {
+                                    if (window.visualViewport) {
+                                        const keyboardOffset = Math.max(0, window.innerHeight - window.visualViewport.height + 200); // Increased buffer
+                                        containerRef.current?.style.setProperty('--keyboard-offset', `${keyboardOffset}px`);
+                                        containerRef.current?.style.setProperty('padding-bottom', `${keyboardOffset}px`);
+                                        e.target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                    }
+                                };
+                                window.visualViewport.addEventListener('resize', onVisualViewportChange);
+                                // Store the cleanup function in the ref or manage it to be called onBlur
+                                (answerTextareaRef.current as any)._cleanupVisualViewport = () => {
+                                    window.visualViewport?.removeEventListener('resize', onVisualViewportChange);
+                                };
+                                onVisualViewportChange(); // Initial call
+                            } else if (window.innerWidth >= 768) { // Desktop: just scroll into view
+                                e.target.scrollIntoView({ behavior: 'smooth', block: 'center' });
                             }
-                            e.target.scrollIntoView({ behavior: 'smooth', block: 'center' });
                          }}
                          onBlur={() => {
-                             if (containerRef.current) {
-                                containerRef.current.style.setProperty('--keyboard-offset', `0px`);
+                             if (containerRef.current && window.innerWidth < 768) { // Only on mobile
+                                containerRef.current?.style.setProperty('--keyboard-offset', `0px`);
+                                containerRef.current?.style.setProperty('padding-bottom', `0px`);
+                                if ((answerTextareaRef.current as any)._cleanupVisualViewport) {
+                                    (answerTextareaRef.current as any)._cleanupVisualViewport();
+                                    delete (answerTextareaRef.current as any)._cleanupVisualViewport;
+                                }
                              }
                          }}
                          onCopy={(e) => handleAnswerEventPrevent(e, 'Copy')}
@@ -625,5 +667,3 @@ export default function Home() {
     </div>
   );
 }
-
-    

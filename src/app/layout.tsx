@@ -25,13 +25,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      {/* Event handlers removed to fix the error */}
+    <html lang="en" className="h-full w-full overflow-hidden">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased h-full w-full overflow-hidden flex flex-col`}
       >
         <ClientEventBlocker /> {/* Add the client component */}
-        <main>{children}</main>
+        <main className="flex-grow flex flex-col h-full w-full overflow-auto">{children}</main>
         <Toaster />
       </body>
     </html>
