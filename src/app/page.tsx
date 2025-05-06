@@ -41,7 +41,7 @@ function shuffleArray<T>(array: T[]): T[] {
 export default function Home() {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState<number>(-1); // -1 means test hasn't started
-  const [timeLeft, setTimeLeft] = useState<number>(0);
+  const [_timeLeft, setTimeLeft] = useState<number>(0); // Renamed to avoid conflict
   const [answer, setAnswer] = useState<string>('');
   const [answers, setAnswers] = useState<Answer[]>([]);
   const [studentEmail, setStudentEmail] = useState<string>('');
@@ -67,7 +67,7 @@ export default function Home() {
   const handleNextQuestionRef = useRef<() => void>(() => {});
 
 
-  const handleAnswerEventPrevent = (e: React.ClipboardEvent<HTMLTextAreaElement>, action: string) => {
+  const handleAnswerEventPrevent = (e: React.ClipboardEvent<HTMLTextAreaElement> | React.DragEvent<HTMLTextAreaElement>, action: string) => {
     e.preventDefault();
     toast({
       title: 'Action Disabled',
@@ -97,20 +97,33 @@ export default function Home() {
     }
 
     // Submit answers immediately
-    const finalAnswers = [...answers];
-     // Include the current partially answered question if applicable
-    if (currentQuestionIndex >= 0 && currentQuestionIndex < questions.length) {
-      const currentQuestionId = questions[currentQuestionIndex]._id;
-      const timeTaken = Date.now() - startTimeRef.current;
-       // Check if this question's answer is already recorded; if not, add the current state
-      if (!finalAnswers.some(a => a.questionId === currentQuestionId)) {
-         finalAnswers.push({ questionId: currentQuestionId, answer, timeTaken });
-      }
-    }
+    // Use functional update for `answers` to ensure we have the latest state.
+    setAnswers(prevAnswers => {
+        let finalAnswers = [...prevAnswers];
+        // Include the current partially answered question if applicable
+        if (currentQuestionIndex >= 0 && currentQuestionIndex < questions.length) {
+          const currentQuestionId = questions[currentQuestionIndex]._id;
+          const timeTaken = Date.now() - startTimeRef.current;
+           // Check if this question's answer is already recorded; if not, add the current state
+          if (!finalAnswers.some(a => a.questionId === currentQuestionId)) {
+             finalAnswers.push({ questionId: currentQuestionId, answer, timeTaken });
+          }
+        }
 
-    console.log('Submitting penalized answers:', { studentEmail, matriculationNumber, answers: finalAnswers });
-    // In a real app, send data to the backend here.
-    // Example: fetch('/api/submit-penalized-test', { method: 'POST', body: JSON.stringify({ studentEmail, matriculationNumber, answers: finalAnswers }) });
+        console.log('Submitting penalized answers:', { studentEmail, matriculationNumber, answers: finalAnswers });
+        if (window.parent !== window) {
+            window.parent.postMessage({
+                type: 'testSubmission',
+                status: 'penalized',
+                reason: reason,
+                studentEmail,
+                matriculationNumber,
+                answers: finalAnswers
+            }, '*'); // '*' is insecure for production, specify origin
+            console.log('Posted penalized test submission to parent.');
+        }
+        return finalAnswers; // Return the updated answers to setAnswers
+    });
 
 
     setTestFinished(true); // Mark test as finished
@@ -123,7 +136,7 @@ export default function Home() {
         document.exitFullscreen().catch(err => console.error("Error exiting fullscreen:", err));
     }
 
-  }, [answers, currentQuestionIndex, questions, answer, toast, testStarted, testFinished, studentEmail, matriculationNumber]); // Added studentEmail and matriculationNumber
+  }, [currentQuestionIndex, questions, answer, toast, testStarted, testFinished, studentEmail, matriculationNumber]); // Added studentEmail and matriculationNumber
 
 
     // Effect for message listener
@@ -204,7 +217,7 @@ export default function Home() {
 
 
            // Ignore resize if it's likely due to orientation change or virtual keyboard
-           // A simple check: if width decreased significantly but height increased, it might be virtual keyboard
+           // A simple check: if width decreased significantly but height decreased, it might be virtual keyboard
            const likelyKeyboard = initialViewportHeightRef.current > 0 && currentHeight < initialViewportHeightRef.current; // Check if height decreased
 
            // console.log(`Resize check: cH:${currentHeight}, iH:${initialViewportHeightRef.current}, oC:${orientationChanged}, lK:${likelyKeyboard}, iUS:${isUnexpectedSize}`);
@@ -266,7 +279,7 @@ export default function Home() {
 
 
   // Define the function that handles moving to the next question
-  const handleNextQuestion = useCallback(() => {
+  const internalHandleNextQuestion = useCallback(() => {
       if (timerRef.current) {
           clearInterval(timerRef.current);
           timerRef.current = null;
@@ -276,7 +289,6 @@ export default function Home() {
       if (currentQuestionIndex >= 0 && currentQuestionIndex < questions.length) {
           const timeTaken = Date.now() - startTimeRef.current;
           const currentQuestionId = questions[currentQuestionIndex]._id;
-          // Avoid duplicate entries if penalty already saved it or test finished auto-saved
           // Use functional update to ensure we have the latest `answers` state
           setAnswers((prevAnswers) => {
               if (!prevAnswers.some(a => a.questionId === currentQuestionId)) {
@@ -308,7 +320,16 @@ export default function Home() {
               // Use the latest answers state by passing a function to setAnswers
               setAnswers(currentAnswers => {
                   console.log('Test finished normally. Final answers:', { studentEmail, matriculationNumber, answers: currentAnswers });
-                  // Example: fetch('/api/submit-test', { method: 'POST', body: JSON.stringify({ studentEmail, matriculationNumber, answers: currentAnswers }) });
+                   if (window.parent !== window) {
+                       window.parent.postMessage({
+                           type: 'testSubmission',
+                           status: 'completed',
+                           studentEmail,
+                           matriculationNumber,
+                           answers: currentAnswers
+                       }, '*'); // '*' is insecure for production, specify origin
+                       console.log('Posted completed test submission to parent.');
+                   }
                   return currentAnswers; // Return the unchanged state
               });
 
@@ -321,14 +342,14 @@ export default function Home() {
       }
   }, [currentQuestionIndex, questions, answer, penaltyQuestions, studentEmail, matriculationNumber]);
 
-  // Update the ref whenever handleNextQuestion changes
+  // Update the ref whenever internalHandleNextQuestion changes
   useEffect(() => {
-    handleNextQuestionRef.current = handleNextQuestion;
-  }, [handleNextQuestion]);
+    handleNextQuestionRef.current = internalHandleNextQuestion;
+  }, [internalHandleNextQuestion]);
 
   // Timer Effect
   useEffect(() => {
-      if (testStarted && currentQuestionIndex !== -1 && !testFinished) {
+      if (testStarted && currentQuestionIndex !== -1 && !testFinished && questions.length > 0 && currentQuestionIndex < questions.length) { // Added questions checks
           if (timerRef.current) {
               clearInterval(timerRef.current);
           }
@@ -376,8 +397,6 @@ export default function Home() {
               timerRef.current = null; // Ensure ref is cleared on cleanup
           }
       };
-      // Only depend on variables that control *starting* or *stopping* the timer.
-      // handleNextQuestion is now accessed via ref inside the interval.
   }, [testStarted, currentQuestionIndex, testFinished, questions]);
 
 
@@ -440,7 +459,7 @@ export default function Home() {
 
   return (
      // Added ref and padding-bottom for keyboard avoidance
-    <div ref={containerRef} className="flex flex-col md:flex-row min-h-screen bg-background text-foreground pointillism pb-[200px] md:pb-0">
+    <div ref={containerRef} className="flex flex-col md:flex-row min-h-screen bg-background text-foreground pointillism pb-[var(--keyboard-offset,0px)] md:pb-0 transition-[padding-bottom] duration-300 ease-in-out">
       {/* Left Column (Info & Instructions) - 40% width */}
       <div className="w-full md:w-2/5 p-6 md:p-8 border-r border-border flex flex-col space-y-6 glass">
          <div className="mb-4">
@@ -487,7 +506,7 @@ export default function Home() {
                  <p>2. Click "Accept & Start Test" to enter fullscreen mode and begin.</p>
                  <p>3. Answer each question within the time limit shown.</p>
                  <p>4. The test will automatically proceed to the next question when the timer runs out or you submit.</p>
-                 <p>5. <strong>Do not exit fullscreen, switch tabs, resize the window significantly, or attempt to copy/paste outside of the answer box. Doing so will result in immediate test submission or penalties.</strong></p>
+                 <p>5. <strong>Do not exit fullscreen, switch tabs, resize the window significantly, or attempt to copy/paste/drag outside of the answer box. Doing so will result in immediate test submission or penalties.</strong></p>
                  <p>6. Use the "Submit Answer" button to move to the next question manually.</p>
             </CardContent>
         </Card>
@@ -521,7 +540,7 @@ export default function Home() {
                     </p>
                </div>
                <div className="text-2xl font-mono font-semibold text-accent">
-                 {formatTime(timeLeft)}
+                 {formatTime(_timeLeft)}
                </div>
             </div>
 
@@ -541,10 +560,23 @@ export default function Home() {
                          placeholder="Type your answer here..."
                          value={answer}
                          onChange={(e) => setAnswer(e.target.value)}
-                         onFocus={(e) => e.target.scrollIntoView({ behavior: 'smooth', block: 'center' })} // Scroll into view on focus
+                         onFocus={(e) => {
+                            if (containerRef.current && window.visualViewport) {
+                                const keyboardOffset = Math.max(0, window.innerHeight - window.visualViewport.height - 50); // 50px buffer
+                                containerRef.current.style.setProperty('--keyboard-offset', `${keyboardOffset}px`);
+                            }
+                            e.target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                         }}
+                         onBlur={() => {
+                             if (containerRef.current) {
+                                containerRef.current.style.setProperty('--keyboard-offset', `0px`);
+                             }
+                         }}
                          onCopy={(e) => handleAnswerEventPrevent(e, 'Copy')}
                          onCut={(e) => handleAnswerEventPrevent(e, 'Cut')}
                          onPaste={(e) => handleAnswerEventPrevent(e, 'Paste')}
+                         onDragStart={(e) => handleAnswerEventPrevent(e, 'Drag')}
+                         onDrop={(e) => handleAnswerEventPrevent(e, 'Drop')}
                          className="min-h-[150px] text-base bg-white/80 dark:bg-black/30 flex-shrink-0" // Added flex-shrink-0
                          aria-label="Answer input area"
                       />
@@ -553,9 +585,9 @@ export default function Home() {
 
 
             <Button
-              onClick={handleNextQuestion} // Use the stable function reference
+              onClick={handleNextQuestionRef.current}
               className="w-full md:w-auto self-end bg-accent text-accent-foreground hover:bg-accent/90 py-3 px-6 mt-4" // Added mt-4 for spacing
-              disabled={currentQuestionIndex >= questions.length} // Disable if no more questions
+              disabled={currentQuestionIndex >= questions.length && penaltyQuestions.length === 0}
               >
                  {currentQuestionIndex < questions.length - 1 || penaltyQuestions.length > 0 ? 'Submit Answer & Next' : 'Submit Final Answer'}
             </Button>
@@ -593,3 +625,5 @@ export default function Home() {
     </div>
   );
 }
+
+    
