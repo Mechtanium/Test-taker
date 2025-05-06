@@ -14,7 +14,6 @@ import AnnahAiLogo from '@/components/annah-ai-logo'; // Import the logo compone
 
 interface Question {
   _id: string;
-  _owner: string;
   query: string;
   test_id: string;
   type: string;
@@ -155,9 +154,9 @@ export default function Home() {
          console.warn('Not running in an iframe, simulating question loading.');
          setTimeout(() => {
               const dummyQuestions: Question[] = [
-                  { _id: 'q1', _owner: 'test', query: 'What is 2 + 2?', test_id: 't1', type: 'math', dur_millis: 15000 },
-                  { _id: 'q2', _owner: 'test', query: 'What is the capital of France?\n\nThis is a longer question to test scrolling behavior.\nIt continues on multiple lines.\nLine 4.\nLine 5.\nLine 6.\nLine 7.\nLine 8.\nLine 9.\nLine 10.', test_id: 't1', type: 'geo', dur_millis: 10000 },
-                  { _id: 'q3', _owner: 'test', query: 'Describe React hooks.', test_id: 't1', type: 'cs', dur_millis: 30000 },
+                  { _id: 'q1', query: 'What is 2 + 2?', test_id: 't1', type: 'math', dur_millis: 15000 },
+                  { _id: 'q2', query: 'What is the capital of France?\n\nThis is a longer question to test scrolling behavior.\nIt continues on multiple lines.\nLine 4.\nLine 5.\nLine 6.\nLine 7.\nLine 8.\nLine 9.\nLine 10.', test_id: 't1', type: 'geo', dur_millis: 10000 },
+                  { _id: 'q3', query: 'Describe React hooks.', test_id: 't1', type: 'cs', dur_millis: 30000 },
               ];
               // Use handleMessage to process dummy data consistently
               handleMessage({ data: dummyQuestions } as MessageEvent);
