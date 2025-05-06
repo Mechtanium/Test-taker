@@ -18,6 +18,19 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  async headers() {
+    return [
+      {
+        source: '/(.*)',
+        headers: [
+          {
+            key: 'Content-Security-Policy',
+            value: "frame-ancestors 'self' https://sapiensng.wixstudio.com;",
+          },
+        ],
+      },
+    ];
+  },
 };
 
 export default nextConfig;
