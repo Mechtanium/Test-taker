@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import Image from 'next/image'; // Import next/image
+import Image from 'next/image'; // Retained for general use, but logo reverted
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -41,16 +41,16 @@ function shuffleArray<T>(array: T[]): T[] {
 export default function Home() {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState<number>(-1); // -1 means test hasn't started
-  const [_timeLeft, setTimeLeft] = useState<number>(0); // Renamed to avoid conflict
+  const [_timeLeft, setTimeLeft] = useState<number>(0); 
   const [answer, setAnswer] = useState<string>('');
   const [answers, setAnswers] = useState<Answer[]>([]);
   const [studentEmail, setStudentEmail] = useState<string>('');
   const [matriculationNumber, setMatriculationNumber] = useState<string>('');
   const [testStarted, setTestStarted] = useState<boolean>(false);
   const [testFinished, setTestFinished] = useState<boolean>(false);
-  const [isLoading, setIsLoading] = useState<boolean>(true); // Added loading state
-  const [isAccepting, setIsAccepting] = useState<boolean>(false); // For fullscreen transition
-  const [penaltyQuestions, setPenaltyQuestions] = useState<Question[]>([]); // Store penalty questions
+  const [isLoading, setIsLoading] = useState<boolean>(true); 
+  const [isAccepting, setIsAccepting] = useState<boolean>(false); 
+  const [penaltyQuestions, setPenaltyQuestions] = useState<Question[]>([]);
 
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
@@ -58,21 +58,15 @@ export default function Home() {
   const initialViewportHeightRef = useRef<number>(0);
   const { toast } = useToast();
   const answerTextareaRef = useRef<HTMLTextAreaElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null); // Ref for the main container
-  const rightColumnRef = useRef<HTMLDivElement>(null); // Ref for the right column
+  const containerRef = useRef<HTMLDivElement>(null); 
+  const rightColumnRef = useRef<HTMLDivElement>(null); 
 
-  const penaltyTriggeredRef = useRef(false); // Ref to track if penalty was triggered
+  const penaltyTriggeredRef = useRef(false); 
 
-  // Ref to hold the latest handleNextQuestion callback
   const handleNextQuestionRef = useRef<() => void>(() => {});
 
 
   const handleAnswerEventPrevent = (e: React.ClipboardEvent<HTMLTextAreaElement> | React.DragEvent<HTMLTextAreaElement> | React.TouchEvent<HTMLTextAreaElement>, action: string) => {
-    // For touch events, we might need to inspect `e.type` if we want to differentiate
-    // specific touch actions that could lead to paste (like long-press context menu).
-    // However, `preventDefault` on `onTouchStart` or `onTouchMove` if they are part of a paste gesture
-    // might be too broad.
-    // The most reliable way to block paste is usually by intercepting the `paste` event itself.
     if (e.type === 'paste' || action.toLowerCase() === 'paste') {
       e.preventDefault();
       toast({
@@ -84,7 +78,6 @@ export default function Home() {
       return;
     }
 
-    // For other actions like copy, cut, drag
     if (e.type === 'copy' || e.type === 'cut' || e.type === 'dragstart' || e.type === 'drop') {
       e.preventDefault();
       toast({
@@ -98,9 +91,9 @@ export default function Home() {
 
 
   const handlePenalty = useCallback((reason: string) => {
-    if (penaltyTriggeredRef.current || !testStarted || testFinished) return; // Prevent multiple triggers or triggering before/after test
+    if (penaltyTriggeredRef.current || !testStarted || testFinished) return; 
 
-    penaltyTriggeredRef.current = true; // Mark penalty as triggered
+    penaltyTriggeredRef.current = true; 
 
     toast({
       title: 'Test Violation Detected',
@@ -109,21 +102,16 @@ export default function Home() {
       duration: 10000,
     });
 
-    // Clear timer
     if (timerRef.current) {
       clearInterval(timerRef.current);
       timerRef.current = null;
     }
-
-    // Submit answers immediately
-    // Use functional update for `answers` to ensure we have the latest state.
+    
     setAnswers(prevAnswers => {
         let finalAnswers = [...prevAnswers];
-        // Include the current partially answered question if applicable
         if (currentQuestionIndex >= 0 && currentQuestionIndex < questions.length) {
           const currentQuestionId = questions[currentQuestionIndex]._id;
           const timeTaken = Date.now() - startTimeRef.current;
-           // Check if this question's answer is already recorded; if not, add the current state
           if (!finalAnswers.some(a => a.questionId === currentQuestionId)) {
              finalAnswers.push({ questionId: currentQuestionId, answer, timeTaken });
           }
@@ -138,38 +126,51 @@ export default function Home() {
                 studentEmail,
                 matriculationNumber,
                 answers: finalAnswers
-            }, '*'); // '*' is insecure for production, specify origin
+            }, '*'); 
             console.log('Posted penalized test submission to parent.');
         }
-        return finalAnswers; // Return the updated answers to setAnswers
+        return finalAnswers; 
     });
 
 
-    setTestFinished(true); // Mark test as finished
-    setCurrentQuestionIndex(-1); // Stop displaying questions
-    setQuestions([]); // Clear questions
-    setPenaltyQuestions([]); // Clear penalty questions
+    setTestFinished(true); 
+    setCurrentQuestionIndex(-1); 
+    setQuestions([]); 
+    setPenaltyQuestions([]); 
 
-     // Attempt to exit fullscreen gracefully if possible
     if (document.fullscreenElement) {
         document.exitFullscreen().catch(err => console.error("Error exiting fullscreen:", err));
     }
 
-  }, [currentQuestionIndex, questions, answer, toast, testStarted, testFinished, studentEmail, matriculationNumber]); // Added studentEmail and matriculationNumber
+  }, [currentQuestionIndex, questions, answer, toast, testStarted, testFinished, studentEmail, matriculationNumber]);
 
 
-    // Effect for message listener
    useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
-      // Add origin check for security in a real application
-      // if (event.origin !== "expected_origin") return;
-      if (event.data?.type === 'questionsLoaded' && Array.isArray(event.data.questions) && event.data.questions.length > 0 && event.data.questions[0]?.query) {
-        const receivedQuestions: Question[] = event.data.questions;
-        setQuestions(shuffleArray([...receivedQuestions])); // Shuffle questions on receive
-        setIsLoading(false); // Questions loaded
-        console.log('Received questions:', receivedQuestions);
+      if (event.origin !== window.origin && event.origin !== 'https://sapiensng.wixstudio.com' && window.origin !== 'null' /* for local file testing */) {
+         // For production, ensure specific origins
+         // console.warn('Message received from unexpected origin:', event.origin);
+         // return; // Uncomment for strict origin check
+      }
+
+      if (event.data?.type === 'questionsLoaded' && Array.isArray(event.data.questions)) {
+        if (event.data.questions.length > 0 && event.data.questions[0]?.query) {
+          const receivedQuestions: Question[] = event.data.questions;
+          setQuestions(shuffleArray([...receivedQuestions]));
+          setIsLoading(false);
+          console.log('Received questions:', receivedQuestions);
+        } else if (event.data.questions.length === 0) {
+           setQuestions([]);
+           setIsLoading(false);
+           console.log('Received empty questions list.');
+           // Optionally, inform the user or take other actions
+           toast({
+            title: 'No Questions',
+            description: 'The test has no questions loaded.',
+            variant: 'destructive'
+           });
+        }
       } else if (event.data === 'TestLockReady') {
-          // Parent window acknowledged readiness, you might not need to do anything here
           console.log('Parent window acknowledged TestLockReady.');
       }
     };
@@ -177,24 +178,23 @@ export default function Home() {
     window.addEventListener('message', handleMessage);
     console.log('Message listener added.');
 
-    // Inform parent window that the app is ready
-     if (window.parent !== window) {
-       window.parent.postMessage('TestLockReady', '*'); // '*' is insecure for production, specify origin
+    if (window.parent !== window) {
+       window.parent.postMessage('TestLockReady', '*'); 
         console.log('Posted TestLockReady message.');
      } else {
-         // For testing without an iframe parent
          console.warn('Not running in an iframe, simulating question loading.');
+         setIsLoading(true); // Start loading
          setTimeout(() => {
-              const dummyQuestions: Question[] = [
+              const dummyQuestionsData: Question[] = [
                   { _id: 'q1', query: 'What is 2 + 2?', test_id: 't1', type: 'math', dur_millis: 15000 },
                   { _id: 'q2', query: 'What is the capital of France?\n\nThis is a longer question to test scrolling behavior.\nIt continues on multiple lines.\nLine 4.\nLine 5.\nLine 6.\nLine 7.\nLine 8.\nLine 9.\nLine 10.', test_id: 't1', type: 'geo', dur_millis: 10000 },
                   { _id: 'q3', query: 'Describe React hooks.', test_id: 't1', type: 'cs', dur_millis: 30000 },
               ];
-              // Use handleMessage to process dummy data consistently
-              handleMessage({ data: { type: 'questionsLoaded', questions: dummyQuestions } } as MessageEvent);
+              setQuestions(shuffleArray([...dummyQuestionsData]));
+              setIsLoading(false);
+              console.log('Simulated questions loaded.');
          }, 1000);
      }
-
 
     return () => {
       window.removeEventListener('message', handleMessage);
@@ -203,12 +203,11 @@ export default function Home() {
         clearInterval(timerRef.current);
       }
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- Only run on mount
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); 
 
-    // Security Listeners Setup Effect (Conditional)
   useEffect(() => {
-    if (!testStarted || testFinished) return; // Only run if test is active
+    if (!testStarted || testFinished) return; 
 
      const handleVisibilityChange = () => {
         if (document.hidden) {
@@ -218,50 +217,29 @@ export default function Home() {
       };
 
       const handleResize = () => {
-          // Check for significant resize changes, ignoring keyboard popups/auto-rotate
-          // Use screen dimensions as a fallback reference
           const currentHeight = window.innerHeight;
           const currentWidth = window.innerWidth;
           const screenHeight = screen.height;
           const screenWidth = screen.width;
-
-          // Check if the window size is drastically different from the screen size (might indicate dev tools or unusual resize)
-          // Allow some tolerance (e.g., 100px) for toolbars, etc.
-           const isUnexpectedSize = Math.abs(currentHeight - screenHeight) > 150 || Math.abs(currentWidth - screenWidth) > 150;
-
-           // More robust orientation check
-            const isLandscape = window.matchMedia("(orientation: landscape)").matches;
-            const previousOrientation = initialViewportHeightRef.current > 0 ? (initialViewportHeightRef.current < window.innerWidth) : isLandscape; // Infer previous based on height/width comparison
-            const orientationChanged = isLandscape !== previousOrientation;
-
-
-           // Ignore resize if it's likely due to orientation change or virtual keyboard
-           // A simple check: if width decreased significantly but height decreased, it might be virtual keyboard
-           const likelyKeyboard = initialViewportHeightRef.current > 0 && currentHeight < initialViewportHeightRef.current; // Check if height decreased
-
-           // console.log(`Resize check: cH:${currentHeight}, iH:${initialViewportHeightRef.current}, oC:${orientationChanged}, lK:${likelyKeyboard}, iUS:${isUnexpectedSize}`);
-
-
+          const isUnexpectedSize = Math.abs(currentHeight - screenHeight) > 150 || Math.abs(currentWidth - screenWidth) > 150;
+          const isLandscape = window.matchMedia("(orientation: landscape)").matches;
+          const previousOrientation = initialViewportHeightRef.current > 0 ? (initialViewportHeightRef.current < window.innerWidth) : isLandscape; 
+          const orientationChanged = isLandscape !== previousOrientation;
+          const likelyKeyboard = initialViewportHeightRef.current > 0 && currentHeight < initialViewportHeightRef.current; 
+          
            if (initialViewportHeightRef.current > 0 && !orientationChanged && !likelyKeyboard && isUnexpectedSize) {
                 console.log('Significant window resize detected.');
                 handlePenalty('Window resized');
            } else {
                 if (orientationChanged) {
                     console.log('Orientation change detected, ignoring resize penalty.');
-                    // Update reference height on orientation change
                     initialViewportHeightRef.current = currentHeight;
                 }
                 if (likelyKeyboard) {
                     console.log('Possible virtual keyboard detected, ignoring resize penalty.');
-                    // We might want to scroll the focused element into view here if needed
                     answerTextareaRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                } else if (!orientationChanged) {
-                     // Update ref height only if not keyboard or orientation change
-                     // This helps establish a baseline for non-keyboard resizes
-                    // initialViewportHeightRef.current = currentHeight;
                 }
            }
-
       };
 
       const handleFullscreenChange = () => {
@@ -271,49 +249,42 @@ export default function Home() {
          }
       };
 
-
       document.addEventListener('visibilitychange', handleVisibilityChange);
       window.addEventListener('resize', handleResize);
       document.addEventListener('fullscreenchange', handleFullscreenChange);
-      document.addEventListener('webkitfullscreenchange', handleFullscreenChange); // Safari
-      document.addEventListener('mozfullscreenchange', handleFullscreenChange); // Firefox
-      document.addEventListener('MSFullscreenChange', handleFullscreenChange); // IE/Edge
+      document.addEventListener('webkitfullscreenchange', handleFullscreenChange); 
+      document.addEventListener('mozfullscreenchange', handleFullscreenChange); 
+      document.addEventListener('MSFullscreenChange', handleFullscreenChange); 
       console.log('Security listeners (visibility, resize, fullscreen) added.');
 
-
-       // Store initial height right after test starts and listeners are added
        initialViewportHeightRef.current = window.innerHeight;
-
 
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('resize', handleResize);
       document.removeEventListener('fullscreenchange', handleFullscreenChange);
-      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange); // Safari
-      document.removeEventListener('mozfullscreenchange', handleFullscreenChange); // Firefox
-      document.removeEventListener('MSFullscreenChange', handleFullscreenChange); // IE/Edge
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+      document.removeEventListener('mozfullscreenchange', handleFullscreenChange);
+      document.removeEventListener('MSFullscreenChange', handleFullscreenChange);
        console.log('Security listeners (visibility, resize, fullscreen) removed.');
     };
   }, [testStarted, testFinished, handlePenalty]);
 
 
-  // Define the function that handles moving to the next question
   const internalHandleNextQuestion = useCallback(() => {
       if (timerRef.current) {
           clearInterval(timerRef.current);
           timerRef.current = null;
       }
 
-      // Save current answer before moving
       if (currentQuestionIndex >= 0 && currentQuestionIndex < questions.length) {
           const timeTaken = Date.now() - startTimeRef.current;
           const currentQuestionId = questions[currentQuestionIndex]._id;
-          // Use functional update to ensure we have the latest `answers` state
           setAnswers((prevAnswers) => {
               const existingAnswerIndex = prevAnswers.findIndex(a => a.questionId === currentQuestionId);
-              if (existingAnswerIndex === -1) { // If answer doesn't exist, add it
+              if (existingAnswerIndex === -1) { 
                 return [...prevAnswers, { questionId: currentQuestionId, answer, timeTaken }];
-              } else { // If answer exists, update it (e.g. if user changes answer and submits early)
+              } else { 
                 const updatedAnswers = [...prevAnswers];
                 updatedAnswers[existingAnswerIndex] = { questionId: currentQuestionId, answer, timeTaken };
                 return updatedAnswers;
@@ -321,26 +292,22 @@ export default function Home() {
           });
       }
 
-      setAnswer(''); // Clear answer field for next question
+      setAnswer(''); 
 
       const nextIndex = currentQuestionIndex + 1;
 
       if (nextIndex < questions.length) {
           setCurrentQuestionIndex(nextIndex);
       } else {
-          // Check for penalty questions
           if (penaltyQuestions.length > 0) {
               const nextPenalty = penaltyQuestions[0];
-              setQuestions(prev => [...prev, nextPenalty]); // Add penalty question to the main list
-              setPenaltyQuestions(prev => prev.slice(1)); // Remove from penalty queue
-              setCurrentQuestionIndex(nextIndex); // Move to the newly added penalty question
+              setQuestions(prev => [...prev, nextPenalty]); 
+              setPenaltyQuestions(prev => prev.slice(1)); 
+              setCurrentQuestionIndex(nextIndex); 
           } else {
-              // No more questions or penalties
               setTestFinished(true);
-              setCurrentQuestionIndex(-1); // Indicate no active question
+              setCurrentQuestionIndex(-1); 
 
-              // Submit final answers here in a real app
-              // Use the latest answers state by passing a function to setAnswers
               setAnswers(currentAnswers => {
                   console.log('Test finished normally. Final answers:', { studentEmail, matriculationNumber, answers: currentAnswers });
                    if (window.parent !== window) {
@@ -350,14 +317,12 @@ export default function Home() {
                            studentEmail,
                            matriculationNumber,
                            answers: currentAnswers
-                       }, '*'); // '*' is insecure for production, specify origin
+                       }, '*'); 
                        console.log('Posted completed test submission to parent.');
                    }
-                  return currentAnswers; // Return the unchanged state
+                  return currentAnswers; 
               });
 
-
-              // Attempt to exit fullscreen gracefully if possible
               if (document.fullscreenElement) {
                   document.exitFullscreen().catch(err => console.error("Error exiting fullscreen:", err));
               }
@@ -365,41 +330,40 @@ export default function Home() {
       }
   }, [currentQuestionIndex, questions, answer, penaltyQuestions, studentEmail, matriculationNumber]);
 
-  // Update the ref whenever internalHandleNextQuestion changes
   useEffect(() => {
     handleNextQuestionRef.current = internalHandleNextQuestion;
   }, [internalHandleNextQuestion]);
 
-  // Timer Effect
   useEffect(() => {
       if (testStarted && currentQuestionIndex !== -1 && !testFinished && questions.length > 0 && currentQuestionIndex < questions.length) {
-          if (timerRef.current) { // Clear previous timer if any
+          if (timerRef.current) { 
               clearInterval(timerRef.current);
           }
 
           startTimeRef.current = Date.now();
-          const duration = questions[currentQuestionIndex]?.dur_millis;
+          const currentQ = questions[currentQuestionIndex];
+          const duration = currentQ?.dur_millis;
 
-          if (duration > 0) {
+          if (typeof duration === 'number' && duration > 0) {
               setTimeLeft(duration);
 
               timerRef.current = setInterval(() => {
                   const elapsed = Date.now() - startTimeRef.current;
-                  const remaining = duration - elapsed;
+                  const newRemainingTime = duration - elapsed; 
 
-                  if (remaining <= 0) {
+                  if (newRemainingTime <= 0) {
                       if (timerRef.current) {
                           clearInterval(timerRef.current);
                           timerRef.current = null;
                       }
                       handleNextQuestionRef.current();
                   } else {
-                      setTimeLeft(remaining);
+                      setTimeLeft(newRemainingTime); 
                   }
               }, 100);
           } else {
-              setTimeLeft(-1);
-              console.warn(`Question ${currentQuestionIndex} has invalid duration: ${duration}`);
+              setTimeLeft(-1); 
+              console.warn(`Question ${currentQuestionIndex} has invalid or zero duration: ${duration}`);
           }
 
           answerTextareaRef.current?.focus();
@@ -415,9 +379,6 @@ export default function Home() {
               timerRef.current = null;
           }
       };
-  // Re-run this effect ONLY when the question changes or test state changes.
-  // Do NOT include `answer` or `_timeLeft` or `setTimeLeft` or `handleNextQuestionRef` here
-  // as they would cause the timer to reset on every keystroke or timer tick.
   }, [testStarted, currentQuestionIndex, testFinished, questions]);
 
 
@@ -430,26 +391,24 @@ export default function Home() {
           });
           return;
         }
-        setIsAccepting(true); // Show loading state on button
+        setIsAccepting(true); 
         try {
           if (document.documentElement.requestFullscreen) {
-            await document.documentElement.requestFullscreen({ navigationUI: "hide" }); // Try hiding navigation UI
-          } else if ((document.documentElement as any).mozRequestFullScreen) { /* Firefox */
+            await document.documentElement.requestFullscreen({ navigationUI: "hide" }); 
+          } else if ((document.documentElement as any).mozRequestFullScreen) { 
             await (document.documentElement as any).mozRequestFullScreen();
-          } else if ((document.documentElement as any).webkitRequestFullscreen) { /* Chrome, Safari & Opera */
+          } else if ((document.documentElement as any).webkitRequestFullscreen) { 
             await (document.documentElement as any).webkitRequestFullscreen();
-          } else if ((document.documentElement as any).msRequestFullscreen) { /* IE/Edge */
+          } else if ((document.documentElement as any).msRequestFullscreen) { 
             await (document.documentElement as any).msRequestFullscreen();
           }
-           // Delay starting the test slightly to ensure fullscreen transition completes
-           // and to allow resize listener to capture initial fullscreen dimensions
           setTimeout(() => {
               setTestStarted(true);
-              setCurrentQuestionIndex(0); // Start with the first question
-              setIsAccepting(false); // Hide loading state
+              setCurrentQuestionIndex(0); 
+              setIsAccepting(false); 
               console.log('Test started after fullscreen.');
-              initialViewportHeightRef.current = window.innerHeight; // Update initial height *after* fullscreen
-          }, 500); // Adjust delay if needed
+              initialViewportHeightRef.current = window.innerHeight; 
+          }, 500); 
 
         } catch (err) {
           console.error("Fullscreen request failed:", err);
@@ -458,19 +417,19 @@ export default function Home() {
             description: 'Could not enter fullscreen mode. Please ensure your browser allows it.',
             variant: 'destructive',
           });
-          setIsAccepting(false); // Hide loading state on failure
+          setIsAccepting(false); 
         }
     };
 
 
    const currentQuestion = questions[currentQuestionIndex];
-   const totalQuestions = questions.length - penaltyQuestions.length; // Base total excluding penalties initially
+   const totalQuestions = questions.length - penaltyQuestions.length; 
    const completedQuestions = currentQuestionIndex >= 0 ? currentQuestionIndex : 0;
    const questionProgressValue = totalQuestions > 0 ? (Math.min(completedQuestions, totalQuestions) / totalQuestions) * 100 : 0;
 
 
    const formatTime = (ms: number): string => {
-        if (ms < 0) return "∞"; // For infinite time indicator
+        if (ms < 0) return "∞"; 
         const totalSeconds = Math.max(0, Math.floor(ms / 1000));
         const minutes = Math.floor(totalSeconds / 60);
         const seconds = totalSeconds % 60;
@@ -482,12 +441,10 @@ export default function Home() {
     <div 
       ref={containerRef} 
       className="flex flex-col md:flex-row h-full w-full bg-background text-foreground pointillism transition-[padding-bottom] duration-300 ease-in-out md:pb-0"
-      // The pb-[var(--keyboard-offset,0px)] will be applied dynamically via JS for mobile
     >
-      {/* Left Column (Info & Instructions) - 40% width */}
       <div className="w-full md:w-2/5 p-6 md:p-8 border-r border-border flex flex-col space-y-6 glass overflow-y-auto">
          <div className="mb-4">
-            <AnnahAiLogo className="w-[200px] h-auto" /> {/* Use the SVG component */}
+            <AnnahAiLogo className="w-[200px] h-auto" />
          </div>
 
         <Card className="glass">
@@ -538,23 +495,21 @@ export default function Home() {
         {!testStarted && !isLoading && !testFinished && (
           <Button
             onClick={handleAccept}
-            disabled={isLoading || isAccepting}
+            disabled={isLoading || isAccepting || questions.length === 0} // Disable if no questions
             className="w-full bg-accent text-accent-foreground hover:bg-accent/90 text-lg py-3"
           >
              {isAccepting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-             {isAccepting ? 'Entering Fullscreen...' : 'Accept & Start Test'}
+             {isAccepting ? 'Entering Fullscreen...' : (questions.length === 0 && !isLoading ? 'No Test Loaded' : 'Accept & Start Test')}
           </Button>
         )}
          {isLoading && !testFinished && <p className="text-center">Loading test...</p>}
 
       </div>
 
-      {/* Right Column (Questions & Timer) - 60% width */}
       <div ref={rightColumnRef} className="w-full md:w-3/5 p-6 md:p-8 flex flex-col h-full overflow-y-auto">
         {testStarted && !testFinished && currentQuestion ? (
           <div className="flex flex-col h-full fade-in space-y-4">
 
-            {/* Progress Bar and Timer */}
             <div className="flex justify-between items-center mb-4 glass p-4 rounded-lg">
                <div className='w-2/3'>
                     <Progress value={questionProgressValue} className="w-full h-3 bg-muted" />
@@ -568,15 +523,12 @@ export default function Home() {
                </div>
             </div>
 
-
-            {/* Question Area */}
-             <Card className="flex-grow flex flex-col glass min-h-0"> {/* Added min-h-0 */}
+             <Card className="flex-grow flex flex-col glass min-h-0"> 
                  <CardHeader>
                      <CardTitle>Question {completedQuestions + 1}</CardTitle>
                  </CardHeader>
-                 <CardContent className="flex-grow flex flex-col space-y-4 min-h-0"> {/* Added min-h-0 */}
+                 <CardContent className="flex-grow flex flex-col space-y-4 min-h-0"> 
                       <div className="p-4 border border-border rounded-md bg-white/50 dark:bg-black/20 flex-grow overflow-auto">
-                         {/* Wrap long text to prevent overflow */}
                          <p className="text-lg whitespace-pre-wrap break-words">{currentQuestion.query}</p>
                       </div>
                       <Textarea
@@ -585,27 +537,26 @@ export default function Home() {
                          value={answer}
                          onChange={(e) => setAnswer(e.target.value)}
                          onFocus={(e) => {
-                            if (containerRef.current && window.visualViewport && window.innerWidth < 768) { // Only on mobile
+                            if (containerRef.current && window.visualViewport && window.innerWidth < 768) { 
                                 const onVisualViewportChange = () => {
                                     if (window.visualViewport) {
-                                        const keyboardOffset = Math.max(0, window.innerHeight - window.visualViewport.height + 200); // Increased buffer
+                                        const keyboardOffset = Math.max(0, window.innerHeight - window.visualViewport.height + 200); 
                                         containerRef.current?.style.setProperty('--keyboard-offset', `${keyboardOffset}px`);
                                         containerRef.current?.style.setProperty('padding-bottom', `${keyboardOffset}px`);
                                         e.target.scrollIntoView({ behavior: 'smooth', block: 'center' });
                                     }
                                 };
                                 window.visualViewport.addEventListener('resize', onVisualViewportChange);
-                                // Store the cleanup function in the ref or manage it to be called onBlur
                                 (answerTextareaRef.current as any)._cleanupVisualViewport = () => {
                                     window.visualViewport?.removeEventListener('resize', onVisualViewportChange);
                                 };
-                                onVisualViewportChange(); // Initial call
-                            } else if (window.innerWidth >= 768) { // Desktop: just scroll into view
+                                onVisualViewportChange(); 
+                            } else if (window.innerWidth >= 768) { 
                                 e.target.scrollIntoView({ behavior: 'smooth', block: 'center' });
                             }
                          }}
                          onBlur={() => {
-                             if (containerRef.current && window.innerWidth < 768) { // Only on mobile
+                             if (containerRef.current && window.innerWidth < 768) { 
                                 containerRef.current?.style.setProperty('--keyboard-offset', `0px`);
                                 containerRef.current?.style.setProperty('padding-bottom', `0px`);
                                 if ((answerTextareaRef.current as any)._cleanupVisualViewport) {
@@ -619,7 +570,10 @@ export default function Home() {
                          onPaste={(e) => handleAnswerEventPrevent(e, 'Paste')}
                          onDragStart={(e) => handleAnswerEventPrevent(e, 'Drag')}
                          onDrop={(e) => handleAnswerEventPrevent(e, 'Drop')}
-                         className="min-h-[150px] text-base bg-white/80 dark:bg-black/30 flex-shrink-0" // Added flex-shrink-0
+                         onTouchStart={(e) => { // Added to potentially catch paste via context menu on touch
+                            // More sophisticated touch paste detection might be needed if this isn't enough
+                         }}
+                         className="min-h-[150px] text-base bg-white/80 dark:bg-black/30 flex-shrink-0" 
                          aria-label="Answer input area"
                       />
                  </CardContent>
@@ -628,7 +582,7 @@ export default function Home() {
 
             <Button
               onClick={handleNextQuestionRef.current}
-              className="w-full md:w-auto self-end bg-accent text-accent-foreground hover:bg-accent/90 py-3 px-6 mt-4" // Added mt-4 for spacing
+              className="w-full md:w-auto self-end bg-accent text-accent-foreground hover:bg-accent/90 py-3 px-6 mt-4" 
               disabled={currentQuestionIndex >= questions.length && penaltyQuestions.length === 0}
               >
                  {currentQuestionIndex < questions.length - 1 || penaltyQuestions.length > 0 ? 'Submit Answer & Next' : 'Submit Final Answer'}
@@ -657,7 +611,7 @@ export default function Home() {
                     <CardDescription>
                       {isLoading
                         ? 'Loading test questions...'
-                        : 'Please read the instructions and click "Accept & Start Test" when ready.'}
+                        : (questions.length === 0 ? 'No test questions are currently loaded. Please wait or contact support.' : 'Please read the instructions and click "Accept & Start Test" when ready.')}
                     </CardDescription>
                     {isLoading && <Loader2 className="mt-4 h-8 w-8 animate-spin mx-auto text-muted-foreground" />}
                </CardContent>
