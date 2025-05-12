@@ -445,6 +445,7 @@ export default function Home() {
       <div className="w-full md:w-2/5 p-6 md:p-8 border-r border-border flex flex-col space-y-6 glass overflow-y-auto">
          <div className="mb-4">
             <AnnahAiLogo className="w-[200px] h-auto" />
+            <p className="text-xs italic text-muted-foreground mt-1">Powered by ANNAH.AI</p>
          </div>
 
         <Card className="glass">
