@@ -92,7 +92,7 @@ export default function Home() {
   const containerRef = useRef<HTMLDivElement>(null);
   const rightColumnRef = useRef<HTMLDivElement>(null);
   const penaltyTriggeredRef = useRef(false);
-  const handleNextQuestionRef = useRef<() => void>(() => {});
+  const handleNextQuestionRef = useRef<() => void>(() => { });
 
 
   const handleAnswerEventPrevent = (e: React.ClipboardEvent<HTMLTextAreaElement | HTMLDivElement> | React.DragEvent<HTMLTextAreaElement | HTMLDivElement> | React.TouchEvent<HTMLTextAreaElement | HTMLDivElement>, action: string) => {
@@ -102,35 +102,35 @@ export default function Home() {
 
     // For touch events, the target might be different, try to find the relevant input
     if (e.type.startsWith('touch') && (e as React.TouchEvent).changedTouches.length > 0) {
-        const touchTarget = document.elementFromPoint(
-            (e as React.TouchEvent).changedTouches[0].clientX,
-            (e as React.TouchEvent).changedTouches[0].clientY
-        );
-        if (touchTarget) target = touchTarget as HTMLElement;
+      const touchTarget = document.elementFromPoint(
+        (e as React.TouchEvent).changedTouches[0].clientX,
+        (e as React.TouchEvent).changedTouches[0].clientY
+      );
+      if (touchTarget) target = touchTarget as HTMLElement;
     }
-    
+
     // Traverse up to see if it's inside an mcq option label or radio group item
     let parent = target;
     while (parent && parent !== document.body) {
-        if (parent.tagName === 'TEXTAREA' || parent.tagName === 'INPUT' || 
-            parent.getAttribute('role') === 'radio' || 
-            (parent.tagName === 'LABEL' && parent.closest('[role="radiogroup"]'))) {
-            isAllowedInput = true;
-            break;
-        }
-        parent = parent.parentElement as HTMLElement;
+      if (parent.tagName === 'TEXTAREA' || parent.tagName === 'INPUT' ||
+        parent.getAttribute('role') === 'radio' ||
+        (parent.tagName === 'LABEL' && parent.closest('[role="radiogroup"]'))) {
+        isAllowedInput = true;
+        break;
+      }
+      parent = parent.parentElement as HTMLElement;
     }
 
     if (isAllowedInput && (e.type === 'paste' || action.toLowerCase() === 'paste')) {
-        // If pasting into allowed input, we still want to show toast and prevent
-         e.preventDefault();
-         toast({
-           title: 'Action Disabled',
-           description: `Pasting is disabled.`,
-           variant: 'destructive',
-           duration: 2000,
-         });
-         return;
+      // If pasting into allowed input, we still want to show toast and prevent
+      e.preventDefault();
+      toast({
+        title: 'Action Disabled',
+        description: `Pasting is disabled.`,
+        variant: 'destructive',
+        duration: 2000,
+      });
+      return;
     }
 
 
@@ -251,14 +251,14 @@ export default function Home() {
       setIsLoading(true);
       setTimeout(() => {
         const dummyQuestionsData: Question[] = [
-            { _id: 'mcq1', query: 'What is the capital of Mars?', test_id: 't1', type: 'MCQ', dur_millis: 20000, options: ['Olympus Mons City', "Valles Marineris Town", "Gale Crater Village", "None of the above"], _owner: 'dummy' },
-            { _id: 'gobj1', query: 'Identify the correct chemical formula for water.', test_id: 't1', type: 'G_OBJ', dur_millis: 18000, _owner: 'dummy' },
-            { _id: 'short1', query: 'Define "photosynthesis" in one sentence.', test_id: 't1', type: 'SHORT', dur_millis: 25000, _owner: 'dummy' },
-            { _id: 'p1', query: 'What is 2 + 2?', test_id: 't1', type: 'PARAGRAPH', dur_millis: 15000, _owner: 'dummy' },
-            { _id: 'mcq2', query: 'Which planet is known as the Red Planet?', test_id: 't1', type: 'MCQ', dur_millis: 12000, options: ['Earth', 'Mars', 'Jupiter', 'Saturn'], _owner: 'dummy' },
-            { _id: 'p2', query: 'What is the capital of France?\n\nThis is a longer question to test scrolling behavior.\nIt continues on multiple lines.\nLine 4.\nLine 5.\nLine 6.\nLine 7.\nLine 8.\nLine 9.\nLine 10.', test_id: 't1', type: 'PARAGRAPH', dur_millis: 10000, _owner: 'dummy' },
-            { _id: 'short2', query: 'What is CPU short for?', test_id: 't1', type: 'SHORT', dur_millis: 10000, _owner: 'dummy' },
-            { _id: 'p3', query: 'Describe React hooks.', test_id: 't1', type: 'PARAGRAPH', dur_millis: 30000, _owner: 'dummy' },
+          { _id: 'mcq1', query: 'What is the capital of Mars?', test_id: 't1', type: 'MCQ', dur_millis: 20000, options: ['Olympus Mons City', "Valles Marineris Town", "Gale Crater Village", "None of the above"], _owner: 'dummy' },
+          { _id: 'gobj1', query: 'Identify the correct chemical formula for water.', test_id: 't1', type: 'G_OBJ', dur_millis: 18000, _owner: 'dummy' },
+          { _id: 'short1', query: 'Define "photosynthesis" in one sentence.', test_id: 't1', type: 'SHORT', dur_millis: 25000, _owner: 'dummy' },
+          { _id: 'p1', query: 'What is 2 + 2?', test_id: 't1', type: 'PARAGRAPH', dur_millis: 15000, _owner: 'dummy' },
+          { _id: 'mcq2', query: 'Which planet is known as the Red Planet?', test_id: 't1', type: 'MCQ', dur_millis: 12000, options: ['Earth', 'Mars', 'Jupiter', 'Saturn'], _owner: 'dummy' },
+          { _id: 'p2', query: 'What is the capital of France?\n\nThis is a longer question to test scrolling behavior.\nIt continues on multiple lines.\nLine 4.\nLine 5.\nLine 6.\nLine 7.\nLine 8.\nLine 9.\nLine 10.', test_id: 't1', type: 'PARAGRAPH', dur_millis: 10000, _owner: 'dummy' },
+          { _id: 'short2', query: 'What is CPU short for?', test_id: 't1', type: 'SHORT', dur_millis: 10000, _owner: 'dummy' },
+          { _id: 'p3', query: 'Describe React hooks.', test_id: 't1', type: 'PARAGRAPH', dur_millis: 30000, _owner: 'dummy' },
         ];
         // Simulate the message structure that handleMessage expects
         const simulatedEventData = { type: 'questionsLoaded', questions: dummyQuestionsData };
@@ -456,8 +456,8 @@ export default function Home() {
         timerRef.current = null;
       }
     };
-  // IMPORTANT: Do NOT add `answer` to dependencies here, it will cause timer resets on each key stroke.
-  // handleNextQuestionRef is a ref, so it's stable. questions changing will trigger re-evaluation.
+    // IMPORTANT: Do NOT add `answer` to dependencies here, it will cause timer resets on each key stroke.
+    // handleNextQuestionRef is a ref, so it's stable. questions changing will trigger re-evaluation.
   }, [testStarted, currentQuestionIndex, testFinished, questions]);
 
 
@@ -504,7 +504,7 @@ export default function Home() {
   const currentQuestion = questions[currentQuestionIndex];
   const totalMainQuestions = questions.filter(q => !penaltyQuestions.some(pq => pq._id === q._id)).length;
   const completedQuestions = currentQuestionIndex >= 0 ? currentQuestionIndex : 0;
-  
+
   const formatTime = (ms: number): string => {
     if (ms < 0) return "∞";
     const totalSeconds = Math.max(0, Math.floor(ms / 1000));
@@ -522,7 +522,7 @@ export default function Home() {
       <div className="w-full md:w-2/5 p-6 md:p-8 border-r border-border flex flex-col space-y-6 glass overflow-y-auto">
         <div className="mb-4">
           <AnnahAiLogo className="w-[200px] h-auto" />
-           <p className="text-xs italic text-muted-foreground mt-1">Powered by...</p>
+          <p className="text-xs italic text-muted-foreground mt-1">Powered by...</p>
         </div>
 
         <Card className="glass">
@@ -560,12 +560,14 @@ export default function Home() {
             <CardTitle>Instructions</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2 text-sm">
-            <p>1. Ensure you have entered your correct email and matriculation number.</p>
-            <p>2. Click "Accept & Start Test" to enter fullscreen mode and begin.</p>
-            <p>3. Answer each question within the time limit shown.</p>
-            <p>4. The test will automatically proceed to the next question when the timer runs out or you submit.</p>
-            <p>5. <strong>Do not exit fullscreen, switch tabs, resize the window significantly, or attempt to copy/paste/drag. Doing so will result in immediate test submission or penalties.</strong></p>
-            <p>6. Use the "Submit Answer" button to move to the next question manually.</p>
+            <ol style={{ listStyleType: 'decimal', paddingLeft: '1.5rem' }}>
+              <li style={{ marginBottom: '0.5rem' }}>Ensure you have entered your correct email and matriculation number.</li>
+              <li style={{ marginBottom: '0.5rem' }}>Click "Accept & Start Test" to enter fullscreen mode and begin.</li>
+              <li style={{ marginBottom: '0.5rem' }}>Answer each question within the time limit shown.</li>
+              <li style={{ marginBottom: '0.5rem' }}>The test will automatically proceed to the next question when the timer runs out or you submit.</li>
+              <li style={{ marginBottom: '0.5rem' }}><strong>Do not exit fullscreen, switch tabs, resize the window significantly, or attempt to copy/paste/drag. Doing so will result in immediate test submission or penalties.</strong></li>
+              <li style={{ marginBottom: '0.5rem' }}>Use the "Submit Answer" button to move to the next question manually.</li>
+            </ol>
           </CardContent>
         </Card>
 
@@ -605,7 +607,7 @@ export default function Home() {
                     const q = questions.find(q => q._id === ans.questionId);
                     return q?.type === type && !penaltyQuestions.some(pq => pq._id === q._id);
                   }).length;
-                  
+
                   const progressVal = totalOfType > 0 ? (answeredOfType / totalOfType) * 100 : 0;
 
                   return (
@@ -626,17 +628,17 @@ export default function Home() {
                 <CardTitle>Question {completedQuestions + 1}</CardTitle>
               </CardHeader>
               <CardContent className="flex-grow flex flex-col space-y-4 min-h-0">
-                <div 
-                    className="p-4 border border-border rounded-md bg-white/50 dark:bg-black/20 flex-grow overflow-auto"
-                    onCopy={(e) => handleAnswerEventPrevent(e, 'Copy')}
-                    onCut={(e) => handleAnswerEventPrevent(e, 'Cut')}
-                    onPaste={(e) => handleAnswerEventPrevent(e, 'Paste')}
-                    onDragStart={(e) => handleAnswerEventPrevent(e, 'Drag')}
-                    onDrop={(e) => handleAnswerEventPrevent(e, 'Drop')}
+                <div
+                  className="p-4 border border-border rounded-md bg-white/50 dark:bg-black/20 flex-grow overflow-auto"
+                  onCopy={(e) => handleAnswerEventPrevent(e, 'Copy')}
+                  onCut={(e) => handleAnswerEventPrevent(e, 'Cut')}
+                  onPaste={(e) => handleAnswerEventPrevent(e, 'Paste')}
+                  onDragStart={(e) => handleAnswerEventPrevent(e, 'Drag')}
+                  onDrop={(e) => handleAnswerEventPrevent(e, 'Drop')}
                 >
                   <p className="text-lg whitespace-pre-wrap break-words">{currentQuestion.query}</p>
                 </div>
-                
+
                 {currentQuestion.type === 'MCQ' && currentQuestion.options ? (
                   <RadioGroup
                     value={answer}
@@ -645,7 +647,7 @@ export default function Home() {
                   >
                     {currentQuestion.options.map((option, index) => (
                       <div key={index} className="flex items-center space-x-3 p-2 rounded-md border border-input bg-white/80 dark:bg-black/30 hover:bg-accent/10">
-                        <RadioGroupItem value={option} id={`option-${currentQuestion._id}-${index}`} className="border-primary text-primary"/>
+                        <RadioGroupItem value={option} id={`option-${currentQuestion._id}-${index}`} className="border-primary text-primary" />
                         <Label htmlFor={`option-${currentQuestion._id}-${index}`} className="font-normal text-base text-foreground cursor-pointer flex-1">
                           {option}
                         </Label>
@@ -659,50 +661,50 @@ export default function Home() {
                     value={answer}
                     onChange={(e) => setAnswer(e.target.value)}
                     onFocus={(e) => {
-                        if (containerRef.current && window.visualViewport && window.innerWidth < 768) { 
-                            const onVisualViewportChange = () => {
-                                if (window.visualViewport) {
-                                    const keyboardOffset = Math.max(0, window.innerHeight - window.visualViewport.height + 200); 
-                                    containerRef.current?.style.setProperty('--keyboard-offset', `${keyboardOffset}px`);
-                                    containerRef.current?.style.setProperty('padding-bottom', `${keyboardOffset}px`);
-                                    e.target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                                }
-                            };
-                            window.visualViewport.addEventListener('resize', onVisualViewportChange);
-                            (answerTextareaRef.current as any)._cleanupVisualViewport = () => {
-                                window.visualViewport?.removeEventListener('resize', onVisualViewportChange);
-                            };
-                            onVisualViewportChange(); 
-                        } else if (window.innerWidth >= 768) { 
+                      if (containerRef.current && window.visualViewport && window.innerWidth < 768) {
+                        const onVisualViewportChange = () => {
+                          if (window.visualViewport) {
+                            const keyboardOffset = Math.max(0, window.innerHeight - window.visualViewport.height + 200);
+                            containerRef.current?.style.setProperty('--keyboard-offset', `${keyboardOffset}px`);
+                            containerRef.current?.style.setProperty('padding-bottom', `${keyboardOffset}px`);
                             e.target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                          }
+                        };
+                        window.visualViewport.addEventListener('resize', onVisualViewportChange);
+                        (answerTextareaRef.current as any)._cleanupVisualViewport = () => {
+                          window.visualViewport?.removeEventListener('resize', onVisualViewportChange);
+                        };
+                        onVisualViewportChange();
+                      } else if (window.innerWidth >= 768) {
+                        e.target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      }
+                    }}
+                    onBlur={() => {
+                      if (containerRef.current && window.innerWidth < 768) {
+                        containerRef.current?.style.setProperty('--keyboard-offset', `0px`);
+                        containerRef.current?.style.setProperty('padding-bottom', `0px`);
+                        if ((answerTextareaRef.current as any)._cleanupVisualViewport) {
+                          (answerTextareaRef.current as any)._cleanupVisualViewport();
+                          delete (answerTextareaRef.current as any)._cleanupVisualViewport;
                         }
-                     }}
-                     onBlur={() => {
-                         if (containerRef.current && window.innerWidth < 768) { 
-                            containerRef.current?.style.setProperty('--keyboard-offset', `0px`);
-                            containerRef.current?.style.setProperty('padding-bottom', `0px`);
-                            if ((answerTextareaRef.current as any)._cleanupVisualViewport) {
-                                (answerTextareaRef.current as any)._cleanupVisualViewport();
-                                delete (answerTextareaRef.current as any)._cleanupVisualViewport;
-                            }
-                         }
-                     }}
+                      }
+                    }}
                     onCopy={(e) => handleAnswerEventPrevent(e, 'Copy')}
                     onCut={(e) => handleAnswerEventPrevent(e, 'Cut')}
                     onPaste={(e) => handleAnswerEventPrevent(e, 'Paste')}
                     onDragStart={(e) => handleAnswerEventPrevent(e, 'Drag')}
                     onDrop={(e) => handleAnswerEventPrevent(e, 'Drop')}
                     onTouchStart={(e: React.TouchEvent<HTMLTextAreaElement>) => {
-                        // Attempt to detect long-press for context menu (paste)
-                        const touchStartTime = Date.now();
-                        (e.target as HTMLTextAreaElement).ontouchend = () => {
-                            const touchEndTime = Date.now();
-                            if (touchEndTime - touchStartTime > 500) { // 500ms might indicate long press
-                                // Cannot directly prevent context menu paste reliably here
-                                // The onPaste handler is the primary defense
-                            }
-                            (e.target as HTMLTextAreaElement).ontouchend = null;
-                        };
+                      // Attempt to detect long-press for context menu (paste)
+                      const touchStartTime = Date.now();
+                      (e.target as HTMLTextAreaElement).ontouchend = () => {
+                        const touchEndTime = Date.now();
+                        if (touchEndTime - touchStartTime > 500) { // 500ms might indicate long press
+                          // Cannot directly prevent context menu paste reliably here
+                          // The onPaste handler is the primary defense
+                        }
+                        (e.target as HTMLTextAreaElement).ontouchend = null;
+                      };
                     }}
                     className="min-h-[150px] text-base bg-white/80 dark:bg-black/30 flex-shrink-0"
                     aria-label="Answer input area"
