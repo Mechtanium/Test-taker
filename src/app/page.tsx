@@ -21,7 +21,6 @@ interface Question {
   type: "MCQ" | "G_OBJ" | "SHORT" | "PARAGRAPH"; // More specific types
   dur_millis: number;
   options?: string[]; // For MCQ questions
-  _owner?: string; // Keep existing fields if they are used by parent
 }
 
 interface Answer {
@@ -251,14 +250,14 @@ export default function Home() {
       setIsLoading(true);
       setTimeout(() => {
         const dummyQuestionsData: Question[] = [
-          { _id: 'mcq1', query: 'What is the capital of Mars?', test_id: 't1', type: 'MCQ', dur_millis: 20000, options: ['Olympus Mons City', "Valles Marineris Town", "Gale Crater Village", "None of the above"], _owner: 'dummy' },
-          { _id: 'gobj1', query: 'Identify the correct chemical formula for water.', test_id: 't1', type: 'G_OBJ', dur_millis: 18000, _owner: 'dummy' },
-          { _id: 'short1', query: 'Define "photosynthesis" in one sentence.', test_id: 't1', type: 'SHORT', dur_millis: 25000, _owner: 'dummy' },
-          { _id: 'p1', query: 'What is 2 + 2?', test_id: 't1', type: 'PARAGRAPH', dur_millis: 15000, _owner: 'dummy' },
-          { _id: 'mcq2', query: 'Which planet is known as the Red Planet?', test_id: 't1', type: 'MCQ', dur_millis: 12000, options: ['Earth', 'Mars', 'Jupiter', 'Saturn'], _owner: 'dummy' },
-          { _id: 'p2', query: 'What is the capital of France?\n\nThis is a longer question to test scrolling behavior.\nIt continues on multiple lines.\nLine 4.\nLine 5.\nLine 6.\nLine 7.\nLine 8.\nLine 9.\nLine 10.', test_id: 't1', type: 'PARAGRAPH', dur_millis: 10000, _owner: 'dummy' },
-          { _id: 'short2', query: 'What is CPU short for?', test_id: 't1', type: 'SHORT', dur_millis: 10000, _owner: 'dummy' },
-          { _id: 'p3', query: 'Describe React hooks.', test_id: 't1', type: 'PARAGRAPH', dur_millis: 30000, _owner: 'dummy' },
+          { _id: 'mcq1', query: 'What is the capital of Mars?', test_id: 't1', type: 'MCQ', dur_millis: 20000, options: ['Olympus Mons City', "Valles Marineris Town", "Gale Crater Village", "None of the above"] },
+          { _id: 'gobj1', query: 'Identify the correct chemical formula for water.', test_id: 't1', type: 'G_OBJ', dur_millis: 18000 },
+          { _id: 'short1', query: 'Define "photosynthesis" in one sentence.', test_id: 't1', type: 'SHORT', dur_millis: 25000 },
+          { _id: 'p1', query: 'What is 2 + 2?', test_id: 't1', type: 'PARAGRAPH', dur_millis: 15000 },
+          { _id: 'mcq2', query: 'Which planet is known as the Red Planet?', test_id: 't1', type: 'MCQ', dur_millis: 12000, options: ['Earth', 'Mars', 'Jupiter', 'Saturn'] },
+          { _id: 'p2', query: 'What is the capital of France?\n\nThis is a longer question to test scrolling behavior.\nIt continues on multiple lines.\nLine 4.\nLine 5.\nLine 6.\nLine 7.\nLine 8.\nLine 9.\nLine 10.', test_id: 't1', type: 'PARAGRAPH', dur_millis: 10000 },
+          { _id: 'short2', query: 'What is CPU short for?', test_id: 't1', type: 'SHORT', dur_millis: 10000 },
+          { _id: 'p3', query: 'Describe React hooks.', test_id: 't1', type: 'PARAGRAPH', dur_millis: 30000 },
         ];
         // Simulate the message structure that handleMessage expects
         const simulatedEventData = { type: 'questionsLoaded', questions: dummyQuestionsData };
@@ -754,4 +753,3 @@ export default function Home() {
     </div>
   );
 }
-
