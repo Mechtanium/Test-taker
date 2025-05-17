@@ -136,7 +136,7 @@ export default function Home() {
       const oauthData = myWixClient.auth.generateOAuthData(redirectUri, originalUriToReturnTo);
       localStorage.setItem('oauthRedirectData', JSON.stringify(oauthData));
       
-      const { authUrl } = await myWixClient.auth.getAuthUrl(oauthData.state);
+      const { authUrl } = await myWixClient.auth.getAuthUrl(oauthData); // Corrected: Pass entire oauthData object
       window.location.href = authUrl;
     });
     // setIsWixAuthLoading(false); // Page will redirect, so this might not be hit
@@ -432,7 +432,7 @@ export default function Home() {
   useEffect(() => {
     if (!testStarted || testFinished) return;
     
-    const currentQForEffect = questions[currentQuestionIndex]; // Define here for effect scope
+    const currentQForEffect = (questions && currentQuestionIndex >= 0 && currentQuestionIndex < questions.length) ? questions[currentQuestionIndex] : null;
   
     const handleVisibilityChange = () => {
       if (document.hidden) {
@@ -463,9 +463,9 @@ export default function Home() {
         }
         if (likelyKeyboard) {
           console.log('Possible virtual keyboard detected, ignoring resize penalty.');
-          if (currentQForEffect?.type !== 'MCQ' && answerTextareaRef.current) { // Use currentQForEffect
+          if (currentQForEffect?.type !== 'MCQ' && answerTextareaRef.current) {
             answerTextareaRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          } else if (currentQForEffect?.type === 'MCQ' && rightColumnRef.current) { // Use currentQForEffect
+          } else if (currentQForEffect?.type === 'MCQ' && rightColumnRef.current) {
              rightColumnRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
           }
         }
@@ -500,7 +500,7 @@ export default function Home() {
       document.removeEventListener('MSFullscreenChange', handleFullscreenChange);
       console.log('Security listeners (visibility, resize, fullscreen) removed.');
     };
-  }, [testStarted, testFinished, handlePenalty, questions, currentQuestionIndex]); // Added questions and currentQuestionIndex
+  }, [testStarted, testFinished, handlePenalty, questions, currentQuestionIndex]);
 
 
   const internalHandleNextQuestion = useCallback(() => {
@@ -654,7 +654,7 @@ export default function Home() {
   };
 
 
-  const currentQuestion = questions[currentQuestionIndex];
+  const currentQuestion = (questions && currentQuestionIndex >=0 && currentQuestionIndex < questions.length) ? questions[currentQuestionIndex] : null;
   const totalMainQuestions = questions.filter(q => !penaltyQuestions.some(pq => pq._id === q._id)).length;
   const completedQuestions = currentQuestionIndex >= 0 ? currentQuestionIndex : 0; 
 
@@ -923,3 +923,4 @@ export default function Home() {
     </div>
   );
 }
+
