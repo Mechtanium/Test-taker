@@ -20,14 +20,20 @@ export default function LoginCallbackPage() {
         }
         localStorage.removeItem('oauthRedirectData'); // Clean up immediately
 
-        const oauthData = JSON.parse(oauthDataString);
-        const { state } = oauthData; // The SDK needs the state for validation
+        const fullOAuthData = JSON.parse(oauthDataString);
+        const stateForSDK = fullOAuthData.state; // State string for SDK
+        const originalUriToReturnTo = fullOAuthData.originalUri; // URI for final redirect
 
-        // Removed the problematic check: if (!window.location.search)
-        // The Wix SDK's processOAuthCallback will handle parsing the full URL including the fragment.
+        console.log('Login Callback - Current URL:', window.location.href);
+        console.log('Login Callback - State for SDK:', stateForSDK);
+        console.log('Login Callback - Original URI to return to:', originalUriToReturnTo);
         
-        // processOAuthCallback expects the full callback URL and the original state
-        const tokens = await myWixClient.auth.processOAuthCallback(window.location.href, state);
+        if (!stateForSDK) {
+            throw new Error('State not found in OAuth redirect data from localStorage.');
+        }
+        
+        // processOAuthCallback expects the full callback URL and the original state string
+        const tokens = await myWixClient.auth.processOAuthCallback(window.location.href, stateForSDK);
 
         if (tokens && tokens.accessToken && tokens.refreshToken) {
           saveTokensToCookie(tokens);
@@ -36,8 +42,7 @@ export default function LoginCallbackPage() {
           toast({ title: 'Login Successful', description: 'You are now logged in.' });
           
           // Redirect to the original URI stored in state or fallback to home
-          const originalUri = state?.originalUri || '/';
-          window.location.href = originalUri;
+          window.location.href = originalUriToReturnTo || '/';
 
         } else {
           throw new Error('Failed to obtain tokens after OAuth callback.');
@@ -54,13 +59,25 @@ export default function LoginCallbackPage() {
         });
          // Optionally redirect to home or a login failed page
          setTimeout(() => {
-            window.location.href = '/'; // Redirect to home after a delay
-         }, 3000);
+            // Attempt to redirect to original URI or home even on failure,
+            // but user will see the error toast first.
+            const oauthDataStringFallback = localStorage.getItem('oauthRedirectData');
+            let fallbackUri = '/';
+            if (oauthDataStringFallback) {
+                try {
+                    const fullOAuthDataFallback = JSON.parse(oauthDataStringFallback);
+                    fallbackUri = fullOAuthDataFallback.originalUri || '/';
+                } catch {
+                    // Ignore parsing error for fallback
+                }
+            }
+            window.location.href = fallbackUri; 
+         }, 5000); // Increased delay to allow user to see error
       }
     };
 
     processLogin();
-  }, [toast]);
+  }, [toast]); // Removed myWixClient from deps as it might cause re-runs if its internal state changes due to setTokens
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-background text-foreground p-4">
@@ -70,7 +87,7 @@ export default function LoginCallbackPage() {
       </div>
       {error && (
         <p className="mt-4 text-destructive">
-          Please try logging in again. If the issue persists, contact support.
+          Please try logging in again. If the issue persists, contact support. (Details: {error})
         </p>
       )}
     </div>
