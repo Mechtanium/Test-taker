@@ -23,9 +23,8 @@ export default function LoginCallbackPage() {
         const oauthData = JSON.parse(oauthDataString);
         const { state } = oauthData; // The SDK needs the state for validation
 
-        if (!window.location.search) {
-            throw new Error('Authorization code not found in URL.');
-        }
+        // Removed the problematic check: if (!window.location.search)
+        // The Wix SDK's processOAuthCallback will handle parsing the full URL including the fragment.
         
         // processOAuthCallback expects the full callback URL and the original state
         const tokens = await myWixClient.auth.processOAuthCallback(window.location.href, state);
