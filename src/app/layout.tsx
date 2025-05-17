@@ -1,8 +1,12 @@
+
 import type { Metadata } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
 import { Toaster } from '@/components/ui/toaster';
-import { ClientEventBlocker } from '@/components/client-event-blocker'; // Import the new component
+import { ClientEventBlocker } from '@/components/client-event-blocker';
+import { LoadingProvider } from '@/contexts/LoadingContext';
+import { ModalProvider } from '@/contexts/ModalContext';
+
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -15,7 +19,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'Test taker', // Changed title here
+  title: 'Test taker',
   description: 'Secure Browser Testing Environment',
 };
 
@@ -29,9 +33,13 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased h-full w-full overflow-hidden flex flex-col`}
       >
-        <ClientEventBlocker /> {/* Add the client component */}
-        <main className="flex-grow flex flex-col h-full w-full overflow-auto">{children}</main>
-        <Toaster />
+        <LoadingProvider>
+          <ModalProvider>
+            <ClientEventBlocker />
+            <main className="flex-grow flex flex-col h-full w-full overflow-auto">{children}</main>
+            <Toaster />
+          </ModalProvider>
+        </LoadingProvider>
       </body>
     </html>
   );

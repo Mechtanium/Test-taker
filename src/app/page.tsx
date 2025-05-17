@@ -2,7 +2,6 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import Image from 'next/image';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -13,12 +12,14 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 import AnnahAiLogo from '@/components/annah-ai-logo';
+import LoginBar from '@/components/LoginBar'; // Import LoginBar
+import { myWixClient, saveTokensToCookie, removeTokensFromCookie, WIX_CLIENT_ID } from '@/lib/wix-client';
+import type { Member } from '@wix/members';
+import { useAsyncHandler } from '@/hooks/useAsyncHandler';
+// import { useModal } from '@/contexts/ModalContext'; // If needed for specific modals
 
 interface QuestionOption {
   text: string;
-  // The API provides key and _id, but we primarily use text for display in RadioGroup
-  // key?: string;
-  // _id?: string;
 }
 interface Question {
   _id: string;
@@ -26,16 +27,18 @@ interface Question {
   test_id: string;
   type: "MCQ" | "G_OBJ" | "SHORT" | "PARAGRAPH";
   dur_millis: number;
-  options?: QuestionOption[] | string[]; // Can be objects from API or strings after processing
+  options?: QuestionOption[] | string[];
 }
 
 interface Answer {
   questionId: string;
+  questionType: Question['type'];
   answer: string;
   timeTaken: number; // in milliseconds
 }
 
 const questionTypeOrder: Question['type'][] = ["MCQ", "G_OBJ", "SHORT", "PARAGRAPH"];
+const SUBMISSION_API_ENDPOINT = "https://sapiensng.wixsite.com/annah-ai/_functions-dev/save_assessment";
 
 function shuffleArray<T>(array: T[]): T[] {
   let currentIndex = array.length, randomIndex;
@@ -53,11 +56,10 @@ function sortAndGroupQuestions(questionsToSort: Question[]): Question[] {
   questionTypeOrder.forEach(type => groupedQuestions[type] = []);
 
   questionsToSort.forEach(q => {
-    const typeKey = questionTypeOrder.includes(q.type) ? q.type : 'PARAGRAPH'; // Default to PARAGRAPH if type is unknown
+    const typeKey = questionTypeOrder.includes(q.type) ? q.type : 'PARAGRAPH';
     if (groupedQuestions[typeKey]) {
       groupedQuestions[typeKey]!.push(q);
     } else {
-      // This case should ideally not be reached if typeKey is always valid
       groupedQuestions['PARAGRAPH']!.push(q);
     }
   });
@@ -82,9 +84,12 @@ export default function Home() {
   const [matriculationNumber, setMatriculationNumber] = useState<string>('');
   const [testStarted, setTestStarted] = useState<boolean>(false);
   const [testFinished, setTestFinished] = useState<boolean>(false);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isLoading, setIsLoading] = useState<boolean>(true); // For test data loading
   const [isAccepting, setIsAccepting] = useState<boolean>(false);
   const [penaltyQuestions, setPenaltyQuestions] = useState<Question[]>([]);
+  
+  const [wixMember, setWixMember] = useState<Member | null | undefined>(undefined); // undefined initially, null if not logged in, Member if logged in
+  const [isWixAuthLoading, setIsWixAuthLoading] = useState(false);
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const startTimeRef = useRef<number>(0);
@@ -95,6 +100,58 @@ export default function Home() {
   const rightColumnRef = useRef<HTMLDivElement>(null);
   const penaltyTriggeredRef = useRef(false);
   const handleNextQuestionRef = useRef<() => void>(() => { });
+
+  const handleAsync = useAsyncHandler();
+  // const { openModal } = useModal(); // If specific modals were used
+
+  const fetchWixMember = useCallback(async () => {
+    setIsWixAuthLoading(true);
+    await handleAsync(async () => {
+      if (myWixClient.auth.loggedIn()) {
+        const currentMember = await myWixClient.members.getCurrentMember();
+        setWixMember(currentMember.member || null);
+      } else {
+        setWixMember(null);
+      }
+    });
+    setIsWixAuthLoading(false);
+  }, [handleAsync]);
+
+  useEffect(() => {
+    fetchWixMember();
+  }, [fetchWixMember]);
+
+  const handleWixLogin = useCallback(async () => {
+    // Example sandbox check - adapt as needed for iframe/standalone
+    // if (WIX_CLIENT_ID === "YOUR_DEFAULT_SANDBOX_CLIENT_ID_HERE" && window.location.hostname.includes('csb.app')) {
+    //   console.warn("Login modal would show here for sandbox default CLIENT_ID.");
+    //   // openModal('wixLoginSandboxWarning'); // If you had such a modal
+    //   return;
+    // }
+    setIsWixAuthLoading(true);
+    await handleAsync(async () => {
+      const redirectUri = `${window.location.origin}/login-callback`;
+      const originalUriToReturnTo = window.location.href; // Current page
+      
+      const oauthData = myWixClient.auth.generateOAuthData(redirectUri, originalUriToReturnTo);
+      localStorage.setItem('oauthRedirectData', JSON.stringify(oauthData));
+      
+      const { authUrl } = await myWixClient.auth.getAuthUrl(oauthData.state);
+      window.location.href = authUrl;
+    });
+    // setIsWixAuthLoading(false); // Page will redirect, so this might not be hit
+  }, [handleAsync]);
+
+  const handleWixLogout = useCallback(async () => {
+    setIsWixAuthLoading(true);
+    await handleAsync(async () => {
+      const { logoutUrl } = await myWixClient.auth.logout(window.location.href);
+      removeTokensFromCookie();
+      setWixMember(null); // Clear member state
+      window.location.href = logoutUrl;
+    });
+    // setIsWixAuthLoading(false); // Page will redirect
+  }, [handleAsync]);
 
 
   const handleAnswerEventPrevent = (e: React.ClipboardEvent<HTMLTextAreaElement | HTMLDivElement> | React.DragEvent<HTMLTextAreaElement | HTMLDivElement> | React.TouchEvent<HTMLTextAreaElement | HTMLDivElement>, action: string) => {
@@ -153,6 +210,61 @@ export default function Home() {
     }
   };
 
+  const submitTestResults = async (submissionStatus: 'completed' | 'penalized', reason?: string) => {
+    const currentQuestionId = (currentQuestionIndex >= 0 && currentQuestionIndex < questions.length) ? questions[currentQuestionIndex]._id : null;
+    const currentQuestionType = (currentQuestionIndex >= 0 && currentQuestionIndex < questions.length) ? questions[currentQuestionIndex].type : undefined;
+    const timeTakenForCurrent = Date.now() - startTimeRef.current;
+
+    let finalAnswers = [...answers];
+    if (currentQuestionId && currentQuestionType && !finalAnswers.some(a => a.questionId === currentQuestionId)) {
+        finalAnswers.push({ questionId: currentQuestionId, questionType: currentQuestionType, answer, timeTaken: timeTakenForCurrent });
+    }
+    
+    const queryParams = new URLSearchParams(window.location.search);
+    const testIdFromUrl = queryParams.get('q');
+
+    const submissionData = {
+        _owner: wixMember?._id || "ANONYMOUS_USER",
+        matriculationNumber,
+        studentEmail,
+        test_id: testIdFromUrl,
+        location: "Geo-location not implemented",
+        status: submissionStatus,
+        type: "testSubmission",
+        answers: finalAnswers,
+        ...(reason && { penalty_reason: reason }) // Add reason if penalized
+    };
+
+    console.log('Submitting test data:', submissionData);
+
+    // API POST submission
+    try {
+      await handleAsync(async () => {
+        const response = await fetch(SUBMISSION_API_ENDPOINT, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(submissionData),
+        });
+        if (!response.ok) {
+            const errorData = await response.text();
+            throw new Error(`API submission failed with status ${response.status}: ${errorData}`);
+        }
+        toast({ title: 'Submission Successful', description: 'Your test results have been submitted.' });
+      });
+    } catch (error) {
+        console.error('Failed to submit test results via API:', error);
+        toast({ title: 'Submission Error', description: `Could not submit results: ${error instanceof Error ? error.message : 'Unknown error'}`, variant: 'destructive' });
+    }
+
+    // Parent window postMessage
+    if (window.parent !== window) {
+        window.parent.postMessage(submissionData, '*');
+        console.log(`Posted ${submissionStatus} test submission to parent.`);
+    }
+  };
+
 
   const handlePenalty = useCallback((reason: string) => {
     if (penaltyTriggeredRef.current || !testStarted || testFinished) return;
@@ -168,30 +280,8 @@ export default function Home() {
       clearInterval(timerRef.current);
       timerRef.current = null;
     }
-
-    setAnswers(prevAnswers => {
-      let finalAnswers = [...prevAnswers];
-      if (currentQuestionIndex >= 0 && currentQuestionIndex < questions.length) {
-        const currentQuestionId = questions[currentQuestionIndex]._id;
-        const timeTaken = Date.now() - startTimeRef.current;
-        if (!finalAnswers.some(a => a.questionId === currentQuestionId)) {
-          finalAnswers.push({ questionId: currentQuestionId, answer, timeTaken });
-        }
-      }
-      console.log('Submitting penalized answers:', { studentEmail, matriculationNumber, answers: finalAnswers });
-      if (window.parent !== window) {
-        window.parent.postMessage({
-          type: 'testSubmission',
-          status: 'penalized',
-          reason: reason,
-          studentEmail,
-          matriculationNumber,
-          answers: finalAnswers 
-        }, '*'); 
-        console.log('Posted penalized test submission to parent.');
-      }
-      return finalAnswers;
-    });
+    
+    submitTestResults('penalized', reason);
 
     setTestFinished(true);
     setCurrentQuestionIndex(-1); 
@@ -201,7 +291,8 @@ export default function Home() {
     if (document.fullscreenElement) {
       document.exitFullscreen().catch(err => console.error("Error exiting fullscreen:", err));
     }
-  }, [currentQuestionIndex, questions, answer, toast, testStarted, testFinished, studentEmail, matriculationNumber]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [answer, answers, currentQuestionIndex, questions, testStarted, testFinished, studentEmail, matriculationNumber, wixMember, handleAsync]);
 
 
   const processReceivedQuestions = useCallback((receivedQuestions: Question[]) => {
@@ -228,7 +319,7 @@ export default function Home() {
               } else if (q.options.length > 0 && typeof q.options[0] === 'string') {
                 newOptions = q.options as string[];
               } else {
-                newOptions = []; // Default to empty if structure is unexpected
+                newOptions = []; 
               }
             }
             return { ...q, options: newOptions };
@@ -261,7 +352,7 @@ export default function Home() {
       const testId = queryParams.get('q');
 
       if (testId) {
-        const apiUrl = `/api/test-proxy?test=${testId}`; // Use the proxy
+        const apiUrl = `/api/test-proxy?test=${testId}`;
         console.log(`Fetching data from: ${apiUrl}`);
         fetch(apiUrl)
           .then(response => {
@@ -275,15 +366,13 @@ export default function Home() {
             if (data && data.questions && Array.isArray(data.questions)) {
               const transformedQuestions = data.questions.map((q: any) => {
                 let newOptions: string[] | undefined = undefined;
-                // Transform options if they are objects with a 'text' property
                 if (q.type === "MCQ" && Array.isArray(q.options)) {
                   if (q.options.length > 0 && typeof q.options[0] === 'object' && q.options[0] !== null && 'text' in q.options[0]) {
                     newOptions = q.options.map((opt: any) => opt.text as string);
                   } else if (q.options.length > 0 && typeof q.options[0] === 'string') {
-                    // If options are already strings, use them directly
                     newOptions = q.options as string[];
                   } else {
-                    newOptions = []; // Default to empty array if options structure is not as expected
+                    newOptions = []; 
                   }
                 }
                 return { ...q, options: newOptions };
@@ -342,9 +431,8 @@ export default function Home() {
 
   useEffect(() => {
     if (!testStarted || testFinished) return;
-  
-    // Derive currentQuestion inside the effect to ensure it's up-to-date for this effect's scope
-    const currentQ = questions[currentQuestionIndex];
+    
+    const currentQForEffect = questions[currentQuestionIndex]; // Define here for effect scope
   
     const handleVisibilityChange = () => {
       if (document.hidden) {
@@ -375,9 +463,9 @@ export default function Home() {
         }
         if (likelyKeyboard) {
           console.log('Possible virtual keyboard detected, ignoring resize penalty.');
-          if (currentQ?.type !== 'MCQ' && answerTextareaRef.current) {
+          if (currentQForEffect?.type !== 'MCQ' && answerTextareaRef.current) { // Use currentQForEffect
             answerTextareaRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          } else if (currentQ?.type === 'MCQ' && rightColumnRef.current) {
+          } else if (currentQForEffect?.type === 'MCQ' && rightColumnRef.current) { // Use currentQForEffect
              rightColumnRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
           }
         }
@@ -399,7 +487,7 @@ export default function Home() {
     document.addEventListener('MSFullscreenChange', handleFullscreenChange);
     console.log('Security listeners (visibility, resize, fullscreen) added.');
   
-    if(testStarted) { // Only set initial height if test has started
+    if(testStarted) { 
         initialViewportHeightRef.current = window.innerHeight;
     }
   
@@ -412,7 +500,7 @@ export default function Home() {
       document.removeEventListener('MSFullscreenChange', handleFullscreenChange);
       console.log('Security listeners (visibility, resize, fullscreen) removed.');
     };
-  }, [testStarted, testFinished, handlePenalty, questions, currentQuestionIndex]);
+  }, [testStarted, testFinished, handlePenalty, questions, currentQuestionIndex]); // Added questions and currentQuestionIndex
 
 
   const internalHandleNextQuestion = useCallback(() => {
@@ -424,13 +512,15 @@ export default function Home() {
     if (currentQuestionIndex >= 0 && currentQuestionIndex < questions.length) {
       const timeTaken = Date.now() - startTimeRef.current;
       const currentQuestionId = questions[currentQuestionIndex]._id;
+      const currentQuestionType = questions[currentQuestionIndex].type;
+
       setAnswers((prevAnswers) => {
         const existingAnswerIndex = prevAnswers.findIndex(a => a.questionId === currentQuestionId);
         if (existingAnswerIndex === -1) {
-          return [...prevAnswers, { questionId: currentQuestionId, answer, timeTaken }];
+          return [...prevAnswers, { questionId: currentQuestionId, questionType, answer, timeTaken }];
         } else {
           const updatedAnswers = [...prevAnswers];
-          updatedAnswers[existingAnswerIndex] = { questionId: currentQuestionId, answer, timeTaken };
+          updatedAnswers[existingAnswerIndex] = { questionId: currentQuestionId, questionType, answer, timeTaken };
           return updatedAnswers;
         }
       });
@@ -451,28 +541,15 @@ export default function Home() {
       } else {
         setTestFinished(true);
         setCurrentQuestionIndex(-1); 
-
-        setAnswers(currentAnswers => {
-          console.log('Test finished normally. Final answers:', { studentEmail, matriculationNumber, answers: currentAnswers });
-          if (window.parent !== window) {
-            window.parent.postMessage({
-              type: 'testSubmission',
-              status: 'completed',
-              studentEmail,
-              matriculationNumber,
-              answers: currentAnswers
-            }, '*'); 
-            console.log('Posted completed test submission to parent.');
-          }
-          return currentAnswers; 
-        });
+        submitTestResults('completed');
 
         if (document.fullscreenElement) {
           document.exitFullscreen().catch(err => console.error("Error exiting fullscreen:", err));
         }
       }
     }
-  }, [currentQuestionIndex, questions, answer, penaltyQuestions, studentEmail, matriculationNumber]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentQuestionIndex, questions, answer, penaltyQuestions, studentEmail, matriculationNumber, wixMember, answers, handleAsync]);
 
 
   useEffect(() => {
@@ -534,6 +611,14 @@ export default function Home() {
       toast({
         title: 'Missing Information',
         description: 'Please enter both student email and matriculation number.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    if (!wixMember) {
+      toast({
+        title: 'Login Required',
+        description: 'Please log in using Wix to start the test.',
         variant: 'destructive',
       });
       return;
@@ -615,10 +700,19 @@ export default function Home() {
       onDrop={(e) => handleAnswerEventPrevent(e, 'Drop')}
     >
       <div className="w-full md:w-2/5 p-6 md:p-8 border-r border-border flex flex-col space-y-6 glass overflow-y-auto">
-        <div className="mb-4">
-          <AnnahAiLogo className="w-[200px] h-auto" />
-          <p className="text-xs italic text-muted-foreground mt-1">Powered by...</p>
+        <div className="flex justify-between items-start mb-4">
+            <div>
+                <AnnahAiLogo className="w-[180px] h-auto" /> {/* Adjusted size slightly */}
+                <p className="text-xs italic text-muted-foreground mt-1">Powered by...</p>
+            </div>
+            <LoginBar 
+                member={wixMember} 
+                onLogin={handleWixLogin} 
+                onLogout={handleWixLogout}
+                isLoading={isWixAuthLoading}
+            />
         </div>
+
 
         <Card className="glass">
           <CardHeader>
@@ -656,7 +750,7 @@ export default function Home() {
           </CardHeader>
           <CardContent className="space-y-2 text-sm">
             <ol style={{ listStyleType: 'decimal', paddingLeft: '1.5rem' }}>
-              <li style={{ marginBottom: '0.5rem' }}>Ensure you have entered your correct email and matriculation number.</li>
+              <li style={{ marginBottom: '0.5rem' }}>Ensure you are logged in and have entered your correct email and matriculation number.</li>
               <li style={{ marginBottom: '0.5rem' }}>Click "Accept & Start Test" to enter fullscreen mode and begin.</li>
               <li style={{ marginBottom: '0.5rem' }}>Answer each question within the time limit shown.</li>
               <li style={{ marginBottom: '0.5rem' }}>The test will automatically proceed to the next question when the timer runs out or you submit.</li>
@@ -669,14 +763,17 @@ export default function Home() {
         {!testStarted && !isLoading && !testFinished && (
           <Button
             onClick={handleAccept}
-            disabled={isLoading || isAccepting || questions.length === 0} 
+            disabled={isLoading || isAccepting || questions.length === 0 || !wixMember || isWixAuthLoading} 
             className="w-full bg-accent text-accent-foreground hover:bg-accent/90 text-lg py-3"
           >
             {isAccepting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-            {isAccepting ? 'Entering Fullscreen...' : (questions.length === 0 && !isLoading ? 'No Test Loaded' : 'Accept & Start Test')}
+            {isAccepting ? 'Entering Fullscreen...' : 
+             !wixMember && !isWixAuthLoading ? 'Please Login to Start' :
+             (questions.length === 0 && !isLoading ? 'No Test Loaded' : 'Accept & Start Test')}
           </Button>
         )}
         {isLoading && !testFinished && <p className="text-center">Loading test...</p>}
+        {isWixAuthLoading && !testStarted && <p className="text-center text-sm text-muted-foreground">Authenticating with Wix...</p>}
       </div>
 
       <div ref={rightColumnRef} className="w-full md:w-3/5 p-6 md:p-8 flex flex-col h-full overflow-y-auto">
@@ -699,7 +796,7 @@ export default function Home() {
                   if (totalOfType === 0) return null; 
 
                   const answeredOfType = answers.filter(ans => {
-                    const q = questions.find(q => q._id === ans.questionId);
+                    const q = questions.find(q_ => q_._id === ans.questionId); // Changed q to q_ to avoid conflict
                     return q?.type === type && !penaltyQuestions.some(pq => pq._id === q._id);
                   }).length;
 
@@ -766,13 +863,13 @@ export default function Home() {
                     onDrop={(e) => handleAnswerEventPrevent(e, 'Drop')}
                     onTouchStart={(e: React.TouchEvent<HTMLTextAreaElement>) => {
                       const touchStartTime = Date.now();
-                      const targetElement = e.target as HTMLTextAreaElement; // Store target for cleanup
+                      const targetElement = e.target as HTMLTextAreaElement; 
                       const touchendHandler = () => {
                         const touchEndTime = Date.now();
                         if (touchEndTime - touchStartTime > 500) { 
                           // onPaste handler will be triggered by the browser's context menu paste
                         }
-                        targetElement.removeEventListener('touchend', touchendHandler); // Clean up
+                        targetElement.removeEventListener('touchend', touchendHandler); 
                       };
                       targetElement.addEventListener('touchend', touchendHandler);
                     }}
@@ -814,9 +911,11 @@ export default function Home() {
               <CardDescription>
                 {isLoading
                   ? 'Loading test questions...'
-                  : (questions.length === 0 ? 'No test questions are currently loaded. Please wait or contact support if this persists.' : 'Please read the instructions and click "Accept & Start Test" when ready.')}
+                  : (wixMember === undefined ? 'Checking login status...' :
+                    !wixMember ? 'Please log in using the button above to proceed.' :
+                    (questions.length === 0 ? 'No test questions are currently loaded. Please wait or contact support if this persists.' : 'Please read the instructions and click "Accept & Start Test" when ready.'))}
               </CardDescription>
-              {isLoading && <Loader2 className="mt-4 h-8 w-8 animate-spin mx-auto text-muted-foreground" />}
+              {(isLoading || (wixMember === undefined && !isWixAuthLoading)) && <Loader2 className="mt-4 h-8 w-8 animate-spin mx-auto text-muted-foreground" />}
             </CardContent>
           </Card>
         )}
