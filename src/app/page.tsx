@@ -14,7 +14,8 @@ import { Loader2 } from 'lucide-react';
 import AnnahAiLogo from '@/components/annah-ai-logo';
 import LoginBar from '@/components/LoginBar'; // Import LoginBar
 import { myWixClient, saveTokensToCookie, removeTokensFromCookie, WIX_CLIENT_ID } from '@/lib/wix-client';
-import type { Member } from '@wix/members';
+// import type { Member } from '@wix/members';
+import type { Member } from '@/lib/utils';
 import { useAsyncHandler } from '@/hooks/useAsyncHandler';
 // import { useModal } from '@/contexts/ModalContext'; // If needed for specific modals
 
@@ -109,6 +110,7 @@ export default function Home() {
     await handleAsync(async () => {
       if (myWixClient.auth.loggedIn()) {
         const currentMember = await myWixClient.members.getCurrentMember();
+        console.log("Current Member struct", currentMember);
         setWixMember(currentMember.member || null);
       } else {
         setWixMember(null);
@@ -136,7 +138,7 @@ export default function Home() {
       const oauthData = myWixClient.auth.generateOAuthData(redirectUri, originalUriToReturnTo);
       localStorage.setItem('oauthRedirectData', JSON.stringify(oauthData));
       
-      const { authUrl } = await myWixClient.auth.getAuthUrl(oauthData); // Corrected: Pass entire oauthData object
+      const { authUrl } = await myWixClient.auth.getAuthUrl(oauthData);
       window.location.href = authUrl;
     });
     // setIsWixAuthLoading(false); // Page will redirect, so this might not be hit
@@ -432,7 +434,7 @@ export default function Home() {
   useEffect(() => {
     if (!testStarted || testFinished) return;
     
-    const currentQForEffect = (questions && currentQuestionIndex >= 0 && currentQuestionIndex < questions.length) ? questions[currentQuestionIndex] : null;
+    const currentQForEffect = questions[currentQuestionIndex]; // Define here for effect scope
   
     const handleVisibilityChange = () => {
       if (document.hidden) {
@@ -463,9 +465,9 @@ export default function Home() {
         }
         if (likelyKeyboard) {
           console.log('Possible virtual keyboard detected, ignoring resize penalty.');
-          if (currentQForEffect?.type !== 'MCQ' && answerTextareaRef.current) {
+          if (currentQForEffect?.type !== 'MCQ' && answerTextareaRef.current) { // Use currentQForEffect
             answerTextareaRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          } else if (currentQForEffect?.type === 'MCQ' && rightColumnRef.current) {
+          } else if (currentQForEffect?.type === 'MCQ' && rightColumnRef.current) { // Use currentQForEffect
              rightColumnRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
           }
         }
@@ -500,7 +502,7 @@ export default function Home() {
       document.removeEventListener('MSFullscreenChange', handleFullscreenChange);
       console.log('Security listeners (visibility, resize, fullscreen) removed.');
     };
-  }, [testStarted, testFinished, handlePenalty, questions, currentQuestionIndex]);
+  }, [testStarted, testFinished, handlePenalty, questions, currentQuestionIndex]); // Added questions and currentQuestionIndex
 
 
   const internalHandleNextQuestion = useCallback(() => {
@@ -517,10 +519,11 @@ export default function Home() {
       setAnswers((prevAnswers) => {
         const existingAnswerIndex = prevAnswers.findIndex(a => a.questionId === currentQuestionId);
         if (existingAnswerIndex === -1) {
-          return [...prevAnswers, { questionId: currentQuestionId, questionType, answer, timeTaken }];
+          const newAnswer: Answer = { questionId: currentQuestionId, questionType: currentQuestionType, answer, timeTaken };
+          return [...prevAnswers, newAnswer];
         } else {
           const updatedAnswers = [...prevAnswers];
-          updatedAnswers[existingAnswerIndex] = { questionId: currentQuestionId, questionType, answer, timeTaken };
+          updatedAnswers[existingAnswerIndex] = { questionId: currentQuestionId, questionType: currentQuestionType, answer, timeTaken };
           return updatedAnswers;
         }
       });
@@ -654,7 +657,7 @@ export default function Home() {
   };
 
 
-  const currentQuestion = (questions && currentQuestionIndex >=0 && currentQuestionIndex < questions.length) ? questions[currentQuestionIndex] : null;
+  const currentQuestion = questions[currentQuestionIndex];
   const totalMainQuestions = questions.filter(q => !penaltyQuestions.some(pq => pq._id === q._id)).length;
   const completedQuestions = currentQuestionIndex >= 0 ? currentQuestionIndex : 0; 
 
@@ -923,4 +926,3 @@ export default function Home() {
     </div>
   );
 }
-
