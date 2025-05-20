@@ -13,7 +13,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 import AnnahAiLogo from '@/components/annah-ai-logo';
 import LoginBar from '@/components/LoginBar';
-import { myWixClient, WIX_CLIENT_ID, removeTokensFromCookie, saveTokensToCookie } from '@/lib/wix-client';
+import { myWixClient, removeTokensFromCookie } from '@/lib/wix-client';
 import type { Member } from '@/lib/utils'; // Ensure this path and type are correct
 import { useAsyncHandler } from '@/hooks/useAsyncHandler';
 
