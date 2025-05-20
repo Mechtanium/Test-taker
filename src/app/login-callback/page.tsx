@@ -31,10 +31,20 @@ export default function LoginCallbackPage() {
         if (!stateForSDK) {
             throw new Error('State not found in OAuth redirect data from localStorage.');
         }
-        
-        // processOAuthCallback expects the full callback URL and the original state string
-        const tokens = await myWixClient.auth.processOAuthCallback(window.location.href, stateForSDK);
 
+        const returnedOAuthData = myWixClient.auth.parseFromUrl();
+        if (returnedOAuthData.error) {
+          alert(`Login error: ${returnedOAuthData.errorDescription}`);
+          return;
+        }
+
+        // processOAuthCallback expects the full callback URL and the original state string
+        const tokens = await myWixClient.auth.getMemberTokens(
+          returnedOAuthData.code,
+          returnedOAuthData.state,
+          fullOAuthData,
+        );
+        
         if (tokens && tokens.accessToken && tokens.refreshToken) {
           saveTokensToCookie(tokens);
           myWixClient.auth.setTokens(tokens); // Ensure client instance is updated
