@@ -12,12 +12,10 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 import AnnahAiLogo from '@/components/annah-ai-logo';
-import LoginBar from '@/components/LoginBar'; // Import LoginBar
-import { myWixClient, saveTokensToCookie, removeTokensFromCookie, WIX_CLIENT_ID } from '@/lib/wix-client';
-// import type { Member } from '@wix/members';
-import type { Member } from '@/lib/utils';
+import LoginBar from '@/components/LoginBar';
+import { myWixClient, WIX_CLIENT_ID, removeTokensFromCookie, saveTokensToCookie } from '@/lib/wix-client';
+import type { Member } from '@/lib/utils'; // Ensure this path and type are correct
 import { useAsyncHandler } from '@/hooks/useAsyncHandler';
-// import { useModal } from '@/contexts/ModalContext'; // If needed for specific modals
 
 interface QuestionOption {
   text: string;
@@ -39,7 +37,7 @@ interface Answer {
 }
 
 const questionTypeOrder: Question['type'][] = ["MCQ", "G_OBJ", "SHORT", "PARAGRAPH"];
-const SUBMISSION_API_ENDPOINT = "https://sapiensng.wixsite.com/annah-ai/_functions-dev/save_assessment";
+const SUBMISSION_API_PROXY_ENDPOINT = "/api/submit-assessment"; // Updated to use proxy
 
 function shuffleArray<T>(array: T[]): T[] {
   let currentIndex = array.length, randomIndex;
@@ -57,10 +55,11 @@ function sortAndGroupQuestions(questionsToSort: Question[]): Question[] {
   questionTypeOrder.forEach(type => groupedQuestions[type] = []);
 
   questionsToSort.forEach(q => {
-    const typeKey = questionTypeOrder.includes(q.type) ? q.type : 'PARAGRAPH';
+    const typeKey = questionTypeOrder.includes(q.type) ? q.type : 'PARAGRAPH'; // Default unknown types to PARAGRAPH
     if (groupedQuestions[typeKey]) {
       groupedQuestions[typeKey]!.push(q);
     } else {
+      // Fallback for very unexpected types, though handled by defaulting typeKey
       groupedQuestions['PARAGRAPH']!.push(q);
     }
   });
@@ -78,7 +77,7 @@ function sortAndGroupQuestions(questionsToSort: Question[]): Question[] {
 export default function Home() {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState<number>(-1);
-  const [_timeLeft, setTimeLeft] = useState<number>(0);
+  const [_timeLeft, setTimeLeft] = useState<number>(0); // Prefixed with _ to avoid conflict if a setter is also named timeLeft
   const [answer, setAnswer] = useState<string>('');
   const [answers, setAnswers] = useState<Answer[]>([]);
   const [studentEmail, setStudentEmail] = useState<string>('');
@@ -89,7 +88,7 @@ export default function Home() {
   const [isAccepting, setIsAccepting] = useState<boolean>(false);
   const [penaltyQuestions, setPenaltyQuestions] = useState<Question[]>([]);
   
-  const [wixMember, setWixMember] = useState<Member | null | undefined>(undefined); // undefined initially, null if not logged in, Member if logged in
+  const [wixMember, setWixMember] = useState<Member | null | undefined>(undefined);
   const [isWixAuthLoading, setIsWixAuthLoading] = useState(false);
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
@@ -100,10 +99,9 @@ export default function Home() {
   const containerRef = useRef<HTMLDivElement>(null);
   const rightColumnRef = useRef<HTMLDivElement>(null);
   const penaltyTriggeredRef = useRef(false);
-  const handleNextQuestionRef = useRef<() => void>(() => { });
+  const handleNextQuestionRef = useRef<() => void>(() => { }); // Initialize with a no-op function
 
   const handleAsync = useAsyncHandler();
-  // const { openModal } = useModal(); // If specific modals were used
 
   const fetchWixMember = useCallback(async () => {
     setIsWixAuthLoading(true);
@@ -124,12 +122,6 @@ export default function Home() {
   }, [fetchWixMember]);
 
   const handleWixLogin = useCallback(async () => {
-    // Example sandbox check - adapt as needed for iframe/standalone
-    // if (WIX_CLIENT_ID === "YOUR_DEFAULT_SANDBOX_CLIENT_ID_HERE" && window.location.hostname.includes('csb.app')) {
-    //   console.warn("Login modal would show here for sandbox default CLIENT_ID.");
-    //   // openModal('wixLoginSandboxWarning'); // If you had such a modal
-    //   return;
-    // }
     setIsWixAuthLoading(true);
     await handleAsync(async () => {
       const redirectUri = `${window.location.origin}/login-callback`;
@@ -138,10 +130,10 @@ export default function Home() {
       const oauthData = myWixClient.auth.generateOAuthData(redirectUri, originalUriToReturnTo);
       localStorage.setItem('oauthRedirectData', JSON.stringify(oauthData));
       
-      const { authUrl } = await myWixClient.auth.getAuthUrl(oauthData);
+      const { authUrl } = await myWixClient.auth.getAuthUrl(oauthData); // Pass full oauthData object
       window.location.href = authUrl;
     });
-    // setIsWixAuthLoading(false); // Page will redirect, so this might not be hit
+    // setIsWixAuthLoading(false); // Not strictly necessary as page will redirect
   }, [handleAsync]);
 
   const handleWixLogout = useCallback(async () => {
@@ -152,14 +144,15 @@ export default function Home() {
       setWixMember(null); // Clear member state
       window.location.href = logoutUrl;
     });
-    // setIsWixAuthLoading(false); // Page will redirect
+    // setIsWixAuthLoading(false); // Not strictly necessary as page will redirect
   }, [handleAsync]);
 
 
   const handleAnswerEventPrevent = (e: React.ClipboardEvent<HTMLTextAreaElement | HTMLDivElement> | React.DragEvent<HTMLTextAreaElement | HTMLDivElement> | React.TouchEvent<HTMLTextAreaElement | HTMLDivElement>, action: string) => {
     let target = e.target as HTMLElement;
-    let isAllowedInput = false; 
+    let isAllowedInput = false; // Flag to check if the event target is an allowed input
 
+    // For touch events, determine the actual element under the touch point
     if (e.type.startsWith('touch') && (e as React.TouchEvent).changedTouches.length > 0) {
       const touchTarget = document.elementFromPoint(
         (e as React.TouchEvent).changedTouches[0].clientX,
@@ -168,11 +161,12 @@ export default function Home() {
       if (touchTarget) target = touchTarget as HTMLElement;
     }
     
+    // Traverse up to see if the event originated from an allowed input/textarea or radio group
     let parent = target;
     while (parent && parent !== document.body) {
       if (parent.tagName === 'TEXTAREA' || parent.tagName === 'INPUT' ||
         parent.getAttribute('role') === 'radio' || 
-        (parent.tagName === 'LABEL' && parent.closest('[role="radiogroup"]'))) { 
+        (parent.tagName === 'LABEL' && parent.closest('[role="radiogroup"]'))) { // Check if label is for a radio
         isAllowedInput = true;
         break;
       }
@@ -187,9 +181,10 @@ export default function Home() {
         variant: 'destructive',
         duration: 2000,
       });
-      return; 
+      return; // Exit early if paste is on allowed input
     }
     
+    // More general paste prevention if not on an allowed input
     if (!isAllowedInput && (e.type === 'paste' || action.toLowerCase() === 'paste')) {
       e.preventDefault();
       toast({
@@ -201,6 +196,7 @@ export default function Home() {
       return;
     }
 
+    // Prevent copy, cut, dragstart, drop globally if not handled above
     if (e.type === 'copy' || e.type === 'cut' || e.type === 'dragstart' || e.type === 'drop') {
       e.preventDefault();
       toast({
@@ -213,6 +209,7 @@ export default function Home() {
   };
 
   const submitTestResults = async (submissionStatus: 'completed' | 'penalized', reason?: string) => {
+    // Ensure the current answer is captured if not already submitted (e.g., timer ran out)
     const currentQuestionId = (currentQuestionIndex >= 0 && currentQuestionIndex < questions.length) ? questions[currentQuestionIndex]._id : null;
     const currentQuestionType = (currentQuestionIndex >= 0 && currentQuestionIndex < questions.length) ? questions[currentQuestionIndex].type : undefined;
     const timeTakenForCurrent = Date.now() - startTimeRef.current;
@@ -230,7 +227,7 @@ export default function Home() {
         matriculationNumber,
         studentEmail,
         test_id: testIdFromUrl,
-        location: "Geo-location not implemented",
+        location: "Geo-location not implemented", // Placeholder as per requirements
         status: submissionStatus,
         type: "testSubmission",
         answers: finalAnswers,
@@ -239,10 +236,10 @@ export default function Home() {
 
     console.log('Submitting test data:', submissionData);
 
-    // API POST submission
+    // API POST submission via proxy
     try {
       await handleAsync(async () => {
-        const response = await fetch(SUBMISSION_API_ENDPOINT, {
+        const response = await fetch(SUBMISSION_API_PROXY_ENDPOINT, { // Use the proxy
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -262,7 +259,7 @@ export default function Home() {
 
     // Parent window postMessage
     if (window.parent !== window) {
-        window.parent.postMessage(submissionData, '*');
+        window.parent.postMessage({ ...submissionData, type: 'testResults' }, '*'); // Ensure type differentiation
         console.log(`Posted ${submissionStatus} test submission to parent.`);
     }
   };
@@ -294,7 +291,7 @@ export default function Home() {
       document.exitFullscreen().catch(err => console.error("Error exiting fullscreen:", err));
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [answer, answers, currentQuestionIndex, questions, testStarted, testFinished, studentEmail, matriculationNumber, wixMember, handleAsync]);
+  }, [answer, answers, currentQuestionIndex, questions, testStarted, testFinished, studentEmail, matriculationNumber, wixMember, handleAsync]); // `submitTestResults` is now implicitly included via handleAsync
 
 
   const processReceivedQuestions = useCallback((receivedQuestions: Question[]) => {
@@ -307,31 +304,34 @@ export default function Home() {
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
+      // Allow messages from current origin (for development) or the specific Wix origin
       if (event.origin !== window.origin && event.origin !== 'https://sapiensng.wixstudio.com' && window.origin !== 'null') {
         // console.warn('Message received from unexpected origin:', event.origin);
-        // return;
+        // return; // Commented out to allow any origin if origin is null (e.g. file:// or sandboxed iframes)
       }
 
       if (event.data?.type === 'questionsLoaded' && Array.isArray(event.data.questions)) {
+         // Transform options for MCQs if they are objects with a 'text' property
          const transformedQuestionsFromMessage = event.data.questions.map((q: any) => {
             let newOptions: string[] | undefined = undefined;
             if (q.type === "MCQ" && Array.isArray(q.options)) {
               if (q.options.length > 0 && typeof q.options[0] === 'object' && q.options[0] !== null && 'text' in q.options[0]) {
                 newOptions = q.options.map((opt: any) => opt.text as string);
               } else if (q.options.length > 0 && typeof q.options[0] === 'string') {
+                // Already in string[] format
                 newOptions = q.options as string[];
               } else {
-                newOptions = []; 
+                newOptions = []; // Default to empty array if options format is unexpected
               }
             }
             return { ...q, options: newOptions };
           });
 
-        if (transformedQuestionsFromMessage.length > 0 && transformedQuestionsFromMessage[0]?.query) {
+        if (transformedQuestionsFromMessage.length > 0 && transformedQuestionsFromMessage[0]?.query) { // Check if first question has query
           processReceivedQuestions(transformedQuestionsFromMessage as Question[]);
         } else if (transformedQuestionsFromMessage.length === 0) {
           setQuestions([]);
-          setIsLoading(false); 
+          setIsLoading(false); // Stop loading if empty questions received
           console.log('Received empty questions list from parent.');
           toast({
             title: 'No Questions',
@@ -347,14 +347,15 @@ export default function Home() {
     window.addEventListener('message', handleMessage);
     console.log('Message listener added.');
 
+    // Fetching logic for standalone mode (not in iframe)
     if (window.parent === window) { 
       console.log('Not in iframe, attempting to fetch questions from URL.');
       setIsLoading(true);
       const queryParams = new URLSearchParams(window.location.search);
-      const testId = queryParams.get('q');
+      const testId = queryParams.get('q'); // Ensure 'q' is the correct param name
 
       if (testId) {
-        const apiUrl = `/api/test-proxy?test=${testId}`;
+        const apiUrl = `/api/test-proxy?test=${testId}`; // Use the proxy
         console.log(`Fetching data from: ${apiUrl}`);
         fetch(apiUrl)
           .then(response => {
@@ -366,6 +367,7 @@ export default function Home() {
           .then(data => {
             console.log('Fetched data via proxy:', data);
             if (data && data.questions && Array.isArray(data.questions)) {
+              // Transform options for MCQs if they are objects with a 'text' property
               const transformedQuestions = data.questions.map((q: any) => {
                 let newOptions: string[] | undefined = undefined;
                 if (q.type === "MCQ" && Array.isArray(q.options)) {
@@ -380,7 +382,7 @@ export default function Home() {
                 return { ...q, options: newOptions };
               });
 
-              if (transformedQuestions.length > 0 && transformedQuestions[0]?.query) {
+              if (transformedQuestions.length > 0 && transformedQuestions[0]?.query) { // Check if first question has query
                  processReceivedQuestions(transformedQuestions as Question[]);
               } else if (transformedQuestions.length === 0) {
                  setQuestions([]);
@@ -393,7 +395,7 @@ export default function Home() {
                  setIsLoading(false); 
               }
             } else {
-              setQuestions([]);
+              setQuestions([]); // Clear questions if data format is invalid
               console.error('Invalid data format or no questions array from proxy:', data);
               toast({ title: 'Invalid Data', description: 'Failed to parse questions from the server response via proxy.', variant: 'destructive'});
               setIsLoading(false);
@@ -415,8 +417,8 @@ export default function Home() {
         setQuestions([]);
         setIsLoading(false);
       }
-    } else { 
-        window.parent.postMessage('TestLockReady', '*'); 
+    } else { // Running in iframe
+        window.parent.postMessage('TestLockReady', '*'); // Notify parent it's ready
         console.log('Posted TestLockReady message.');
     }
 
@@ -429,7 +431,7 @@ export default function Home() {
       }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [processReceivedQuestions, toast]); 
+  }, [processReceivedQuestions, toast]); // Removed `handleMessage` from deps, it's stable if `processReceivedQuestions` is stable
 
   useEffect(() => {
     if (!testStarted || testFinished) return;
@@ -448,21 +450,24 @@ export default function Home() {
       const currentWidth = window.innerWidth;
       const screenHeight = screen.height;
       const screenWidth = screen.width;
-      const isUnexpectedSize = Math.abs(currentHeight - screenHeight) > 200 || Math.abs(currentWidth - screenWidth) > 150;
+      const isUnexpectedSize = Math.abs(currentHeight - screenHeight) > 200 || Math.abs(currentWidth - screenWidth) > 150; // Adjust thresholds as needed
   
       const isLandscape = window.matchMedia("(orientation: landscape)").matches;
-      const previousOrientation = initialViewportHeightRef.current > 0 ? (initialViewportHeightRef.current < window.innerWidth) : isLandscape;
+      const previousOrientation = initialViewportHeightRef.current > 0 ? (initialViewportHeightRef.current < window.innerWidth) : isLandscape; // Heuristic for previous orientation
       const orientationChanged = isLandscape !== previousOrientation;
       const likelyKeyboard = initialViewportHeightRef.current > 0 && currentHeight < initialViewportHeightRef.current;
   
+      // Apply penalty only if resize is significant, not due to orientation change or keyboard
       if (initialViewportHeightRef.current > 0 && !orientationChanged && !likelyKeyboard && isUnexpectedSize) {
         console.log('Significant window resize detected.');
         handlePenalty('Window resized');
       } else {
+        // Update ref for next resize event if orientation changed
         if (orientationChanged) {
           console.log('Orientation change detected, ignoring resize penalty.');
-          initialViewportHeightRef.current = currentHeight;
+          initialViewportHeightRef.current = currentHeight; // Update baseline height
         }
+        // If keyboard likely appeared, try to scroll active input into view
         if (likelyKeyboard) {
           console.log('Possible virtual keyboard detected, ignoring resize penalty.');
           if (currentQForEffect?.type !== 'MCQ' && answerTextareaRef.current) { // Use currentQForEffect
@@ -484,12 +489,12 @@ export default function Home() {
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('resize', handleResize);
     document.addEventListener('fullscreenchange', handleFullscreenChange);
-    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
-    document.addEventListener('mozfullscreenchange', handleFullscreenChange);
-    document.addEventListener('MSFullscreenChange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange); // Safari
+    document.addEventListener('mozfullscreenchange', handleFullscreenChange); // Firefox
+    document.addEventListener('MSFullscreenChange', handleFullscreenChange); // IE/Edge
     console.log('Security listeners (visibility, resize, fullscreen) added.');
   
-    if(testStarted) { 
+    if(testStarted) { // Set initial height only once when test starts and is in fullscreen
         initialViewportHeightRef.current = window.innerHeight;
     }
   
@@ -514,14 +519,16 @@ export default function Home() {
     if (currentQuestionIndex >= 0 && currentQuestionIndex < questions.length) {
       const timeTaken = Date.now() - startTimeRef.current;
       const currentQuestionId = questions[currentQuestionIndex]._id;
-      const currentQuestionType = questions[currentQuestionIndex].type;
+      const currentQuestionType = questions[currentQuestionIndex].type; // Get type here
 
       setAnswers((prevAnswers) => {
         const existingAnswerIndex = prevAnswers.findIndex(a => a.questionId === currentQuestionId);
         if (existingAnswerIndex === -1) {
+          // Ensure questionType is always included
           const newAnswer: Answer = { questionId: currentQuestionId, questionType: currentQuestionType, answer, timeTaken };
           return [...prevAnswers, newAnswer];
         } else {
+          // Update existing answer, ensuring questionType is correct
           const updatedAnswers = [...prevAnswers];
           updatedAnswers[existingAnswerIndex] = { questionId: currentQuestionId, questionType: currentQuestionType, answer, timeTaken };
           return updatedAnswers;
@@ -529,22 +536,24 @@ export default function Home() {
       });
     }
 
-    setAnswer(''); 
+    setAnswer(''); // Clear answer field for next question
 
     const nextIndex = currentQuestionIndex + 1;
 
     if (nextIndex < questions.length) {
       setCurrentQuestionIndex(nextIndex);
     } else {
+      // Check for penalty questions
       if (penaltyQuestions.length > 0) {
         const nextPenalty = penaltyQuestions[0];
-        setQuestions(prev => [...prev, nextPenalty]); 
-        setPenaltyQuestions(prev => prev.slice(1)); 
-        setCurrentQuestionIndex(nextIndex); 
+        setQuestions(prev => [...prev, nextPenalty]); // Add penalty question to the main list
+        setPenaltyQuestions(prev => prev.slice(1)); // Remove from penalty queue
+        setCurrentQuestionIndex(nextIndex); // Move to the newly added penalty question
       } else {
+        // No more questions or penalties
         setTestFinished(true);
-        setCurrentQuestionIndex(-1); 
-        submitTestResults('completed');
+        setCurrentQuestionIndex(-1); // Indicate no active question
+        submitTestResults('completed'); // Submit results
 
         if (document.fullscreenElement) {
           document.exitFullscreen().catch(err => console.error("Error exiting fullscreen:", err));
@@ -552,7 +561,7 @@ export default function Home() {
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentQuestionIndex, questions, answer, penaltyQuestions, studentEmail, matriculationNumber, wixMember, answers, handleAsync]);
+  }, [currentQuestionIndex, questions, answer, penaltyQuestions, studentEmail, matriculationNumber, wixMember, answers, handleAsync]); // `submitTestResults` is now part of the dependency chain via handleAsync
 
 
   useEffect(() => {
@@ -561,41 +570,43 @@ export default function Home() {
 
   useEffect(() => {
     if (testStarted && currentQuestionIndex !== -1 && !testFinished && questions.length > 0 && currentQuestionIndex < questions.length) {
-      if (timerRef.current) { 
+      if (timerRef.current) { // Clear existing timer if any
         clearInterval(timerRef.current);
       }
 
-      startTimeRef.current = Date.now(); 
+      startTimeRef.current = Date.now(); // Reset start time for the new question
       const currentQ = questions[currentQuestionIndex];
-      const duration = currentQ?.dur_millis; 
+      const duration = currentQ?.dur_millis; // Use optional chaining
 
       if (typeof duration === 'number' && duration > 0) {
-        setTimeLeft(duration); 
+        setTimeLeft(duration); // Set initial time for the question
 
         timerRef.current = setInterval(() => {
           const elapsed = Date.now() - startTimeRef.current;
           const newRemainingTime = duration - elapsed;
 
           if (newRemainingTime <= 0) {
-            if (timerRef.current) { 
+            if (timerRef.current) { // Check again before clearing and calling next
               clearInterval(timerRef.current);
               timerRef.current = null;
             }
-            handleNextQuestionRef.current(); 
+            handleNextQuestionRef.current(); // Use the ref to call the latest version
           } else {
-            setTimeLeft(newRemainingTime); 
+            setTimeLeft(newRemainingTime); // Update displayed time
           }
-        }, 100); 
+        }, 100); // Update timer every 100ms for smoother display
       } else {
-        setTimeLeft(-1); 
+        // Handle questions with no duration (e.g., display indefinitely or use a default)
+        setTimeLeft(-1); // Indicate infinite time or an issue
         console.warn(`Question ${currentQuestionIndex} has invalid or zero duration: ${duration}`);
       }
 
+      // Auto-focus textarea for non-MCQ questions
       if (currentQ.type !== 'MCQ') {
         answerTextareaRef.current?.focus();
       }
 
-    } else if (timerRef.current) { 
+    } else if (timerRef.current) { // If test is not active, clear any existing timer
       clearInterval(timerRef.current);
       timerRef.current = null;
     }
@@ -606,7 +617,7 @@ export default function Home() {
         timerRef.current = null;
       }
     };
-  }, [testStarted, currentQuestionIndex, testFinished, questions]); 
+  }, [testStarted, currentQuestionIndex, testFinished, questions]); // Removed answer from dependencies to prevent timer reset on typing
 
 
   const handleAccept = async () => {
@@ -618,7 +629,7 @@ export default function Home() {
       });
       return;
     }
-    if (!wixMember) {
+    if (!wixMember) { // Check if Wix member is logged in
       toast({
         title: 'Login Required',
         description: 'Please log in using Wix to start the test.',
@@ -630,20 +641,21 @@ export default function Home() {
     try {
       if (document.documentElement.requestFullscreen) {
         await document.documentElement.requestFullscreen({ navigationUI: "hide" });
-      } else if ((document.documentElement as any).mozRequestFullScreen) { 
+      } else if ((document.documentElement as any).mozRequestFullScreen) { // Firefox
         await (document.documentElement as any).mozRequestFullScreen();
-      } else if ((document.documentElement as any).webkitRequestFullscreen) { 
+      } else if ((document.documentElement as any).webkitRequestFullscreen) { // Chrome, Safari, Opera
         await (document.documentElement as any).webkitRequestFullscreen();
-      } else if ((document.documentElement as any).msRequestFullscreen) { 
+      } else if ((document.documentElement as any).msRequestFullscreen) { // IE/Edge
         await (document.documentElement as any).msRequestFullscreen();
       }
+      // Delay setting testStarted to allow fullscreen transition and setup security listeners properly
       setTimeout(() => {
         setTestStarted(true);
-        setCurrentQuestionIndex(0); 
+        setCurrentQuestionIndex(0); // Start with the first question
         setIsAccepting(false);
         console.log('Test started after fullscreen.');
-        initialViewportHeightRef.current = window.innerHeight; 
-      }, 500); 
+        initialViewportHeightRef.current = window.innerHeight; // Set baseline height for resize checks
+      }, 500); // 0.5 second delay
 
     } catch (err) {
       console.error("Fullscreen request failed:", err);
@@ -658,11 +670,11 @@ export default function Home() {
 
 
   const currentQuestion = questions[currentQuestionIndex];
-  const totalMainQuestions = questions.filter(q => !penaltyQuestions.some(pq => pq._id === q._id)).length;
-  const completedQuestions = currentQuestionIndex >= 0 ? currentQuestionIndex : 0; 
+  const totalMainQuestions = questions.filter(q => !penaltyQuestions.some(pq => pq._id === q._id)).length; // Exclude penalty questions from main count
+  const completedQuestions = currentQuestionIndex >= 0 ? currentQuestionIndex : 0; // currentQuestionIndex can be -1
 
   const formatTime = (ms: number): string => {
-    if (ms < 0) return "∞"; 
+    if (ms < 0) return "∞"; // For questions with no time limit or error
     const totalSeconds = Math.max(0, Math.floor(ms / 1000));
     const minutes = Math.floor(totalSeconds / 60);
     const seconds = totalSeconds % 60;
@@ -675,17 +687,21 @@ export default function Home() {
     if (!visualViewport) return;
 
     const handleVisualViewportResize = () => {
+        // Calculate the difference between window height and visual viewport height
         const newOffset = Math.max(0, window.innerHeight - visualViewport.height);
+        // Only apply significant offset if keyboard is likely up (e.g. > 150px)
+        // Add more padding (e.g., 200px more) to ensure textarea is well above keyboard
         setKeyboardOffset(newOffset > 150 ? newOffset + 200 : 0);
 
+        // Attempt to scroll the active element into view if it's the textarea or in the right column
         if (newOffset > 150 && (document.activeElement === answerTextareaRef.current || rightColumnRef.current?.contains(document.activeElement))) {
-          setTimeout(() => { 
+          setTimeout(() => { // Delay to allow layout to adjust
             document.activeElement?.scrollIntoView({ behavior: 'smooth', block: 'center' });
           }, 100); 
         }
     };
     visualViewport.addEventListener('resize', handleVisualViewportResize);
-    handleVisualViewportResize(); 
+    handleVisualViewportResize(); // Initial check
 
     return () => visualViewport.removeEventListener('resize', handleVisualViewportResize);
   }, []);
@@ -695,7 +711,7 @@ export default function Home() {
     <div
       ref={containerRef}
       className="flex flex-col md:flex-row h-full w-full bg-background text-foreground pointillism transition-all duration-300 ease-in-out"
-      style={{ paddingBottom: `${keyboardOffset}px`}} 
+      style={{ paddingBottom: `${keyboardOffset}px`}} // Apply dynamic padding at the bottom
       onCopy={(e) => handleAnswerEventPrevent(e, 'Copy')}
       onCut={(e) => handleAnswerEventPrevent(e, 'Cut')}
       onPaste={(e) => handleAnswerEventPrevent(e, 'Paste')}
@@ -782,6 +798,7 @@ export default function Home() {
       <div ref={rightColumnRef} className="w-full md:w-3/5 p-6 md:p-8 flex flex-col h-full overflow-y-auto">
         {testStarted && !testFinished && currentQuestion ? (
           <div className="flex flex-col h-full fade-in space-y-4">
+            {/* Progress Section */}
             <div className="mb-4 glass p-4 rounded-lg">
               <div className="flex justify-between items-center mb-3">
                 <p className="text-lg font-semibold text-foreground">
@@ -794,10 +811,12 @@ export default function Home() {
               </div>
               <div className="space-y-2">
                 {questionTypeOrder.map(type => {
+                  // Filter out penalty questions from this specific type count for main progress
                   const questionsOfType = questions.filter(q => q.type === type && !penaltyQuestions.some(pq => pq._id === q._id));
                   const totalOfType = questionsOfType.length;
-                  if (totalOfType === 0) return null; 
+                  if (totalOfType === 0) return null; // Don't render progress for types not present
 
+                  // Count answered questions of this type, excluding penalty questions
                   const answeredOfType = answers.filter(ans => {
                     const q = questions.find(q_ => q_._id === ans.questionId); // Changed q to q_ to avoid conflict
                     return q?.type === type && !penaltyQuestions.some(pq => pq._id === q._id);
@@ -818,22 +837,24 @@ export default function Home() {
               </div>
             </div>
 
-            <Card className="flex-grow flex flex-col glass min-h-0"> 
+            {/* Question Display Card */}
+            <Card className="flex-grow flex flex-col glass min-h-0"> {/* Ensure card can shrink and grow */}
               <CardHeader>
                 <CardTitle>Question {completedQuestions + 1}</CardTitle>
               </CardHeader>
-              <CardContent className="flex-grow flex flex-col space-y-4 min-h-0"> 
+              <CardContent className="flex-grow flex flex-col space-y-4 min-h-0"> {/* Allow content to take space and scroll if needed */}
                 <div
-                  className="p-4 border border-border rounded-md bg-white/50 dark:bg-black/20 flex-grow overflow-auto"
+                  className="p-4 border border-border rounded-md bg-white/50 dark:bg-black/20 flex-grow overflow-auto" // Allow this part to scroll if query is long
                 >
                   <p className="text-lg whitespace-pre-wrap break-words">{currentQuestion.query}</p>
                 </div>
 
+                {/* Answer Input: MCQ or Textarea */}
                 {currentQuestion.type === 'MCQ' && Array.isArray(currentQuestion.options) ? (
                   <RadioGroup
                     value={answer}
                     onValueChange={setAnswer}
-                    className="space-y-3 p-1" 
+                    className="space-y-3 p-1" // Added padding for better spacing
                   >
                     {(currentQuestion.options as string[]).map((optionText, index) => (
                       <div key={index} className="flex items-center space-x-3 p-2 rounded-md border border-input bg-white/80 dark:bg-black/30 hover:bg-accent/10">
@@ -851,10 +872,12 @@ export default function Home() {
                     value={answer}
                     onChange={(e) => setAnswer(e.target.value)}
                      onFocus={(e) => {
-                        if (window.visualViewport && window.innerWidth < 768) { 
+                        // Improved scroll into view logic for mobile
+                        if (window.visualViewport && window.innerWidth < 768) { // Check for mobile-like screen width
                              const targetRect = e.target.getBoundingClientRect();
                              const viewportHeight = window.visualViewport?.height || window.innerHeight;
-                             if (targetRect.bottom > viewportHeight - 50) { 
+                             // If the bottom of the textarea is close to or below the visible viewport bottom
+                             if (targetRect.bottom > viewportHeight - 50) { // 50px buffer
                                  e.target.scrollIntoView({ behavior: 'smooth', block: 'center' });
                              }
                         }
@@ -865,18 +888,21 @@ export default function Home() {
                     onDragStart={(e) => handleAnswerEventPrevent(e, 'Drag')}
                     onDrop={(e) => handleAnswerEventPrevent(e, 'Drop')}
                     onTouchStart={(e: React.TouchEvent<HTMLTextAreaElement>) => {
+                      // Logic to detect long press for paste context menu on mobile
                       const touchStartTime = Date.now();
-                      const targetElement = e.target as HTMLTextAreaElement; 
+                      const targetElement = e.target as HTMLTextAreaElement; // Cast target
                       const touchendHandler = () => {
                         const touchEndTime = Date.now();
-                        if (touchEndTime - touchStartTime > 500) { 
-                          // onPaste handler will be triggered by the browser's context menu paste
+                        if (touchEndTime - touchStartTime > 500) { // 500ms for long press
+                          // If a long press is detected, the system context menu might appear.
+                          // The onPaste handler will be triggered by the browser's context menu paste action.
+                          // No explicit toast here to avoid double toasting if onPaste also triggers.
                         }
-                        targetElement.removeEventListener('touchend', touchendHandler); 
+                        targetElement.removeEventListener('touchend', touchendHandler); // Clean up
                       };
                       targetElement.addEventListener('touchend', touchendHandler);
                     }}
-                    className="min-h-[150px] text-base bg-white/80 dark:bg-black/30 flex-shrink-0" 
+                    className="min-h-[150px] text-base bg-white/80 dark:bg-black/30 flex-shrink-0" // flex-shrink-0 prevents it from shrinking too much
                     aria-label="Answer input area"
                   />
                 )}
@@ -886,7 +912,7 @@ export default function Home() {
             <Button
               onClick={handleNextQuestionRef.current}
               className="w-full md:w-auto self-end bg-accent text-accent-foreground hover:bg-accent/90 py-3 px-6 mt-4"
-              disabled={currentQuestionIndex >= questions.length && penaltyQuestions.length === 0} 
+              disabled={currentQuestionIndex >= questions.length && penaltyQuestions.length === 0} // Disable if no more questions or penalties
             >
               {currentQuestionIndex < questions.length - 1 || penaltyQuestions.length > 0 ? 'Submit Answer & Next' : 'Submit Final Answer'}
             </Button>
