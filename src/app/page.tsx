@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
@@ -14,7 +13,7 @@ import { Loader2 } from 'lucide-react';
 import AnnahAiLogo from '@/components/annah-ai-logo';
 import LoginBar from '@/components/LoginBar';
 import { myWixClient, removeTokensFromCookie } from '@/lib/wix-client';
-import type { Member } from '@/lib/utils'; // Ensure this path and type are correct
+import type { Member } from '@/lib/utils';
 import { useAsyncHandler } from '@/hooks/useAsyncHandler';
 
 interface QuestionOption {
@@ -94,6 +93,9 @@ export default function Home() {
   
   const [wixMember, setWixMember] = useState<Member | null | undefined>(undefined);
   const [isWixAuthLoading, setIsWixAuthLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [submissionStatusMessage, setSubmissionStatusMessage] = useState<string>('');
+
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const startTimeRef = useRef<number>(0);
@@ -208,7 +210,11 @@ export default function Home() {
     }
   };
 
-  const submitTestResults = async (submissionStatus: 'completed' | 'penalized', reason?: string) => {
+  const submitTestResults = async (submissionStatusType: 'completed' | 'penalized', reason?: string) => {
+    setIsSubmitting(true);
+    setSubmissionStatusMessage('Submitting answers...');
+    penaltyTriggeredRef.current = (submissionStatusType === 'penalized'); // Ensure penaltyTriggeredRef reflects current submission
+
     const currentQuestionId = (currentQuestionIndex >= 0 && currentQuestionIndex < questions.length) ? questions[currentQuestionIndex]._id : null;
     const currentQuestionType = (currentQuestionIndex >= 0 && currentQuestionIndex < questions.length) ? questions[currentQuestionIndex].type : undefined;
     const timeTakenForCurrent = Date.now() - startTimeRef.current;
@@ -227,7 +233,7 @@ export default function Home() {
         studentEmail,
         test_id: testIdFromUrl,
         location: "Geo-location not implemented",
-        status: submissionStatus,
+        status: submissionStatusType,
         type: "testSubmission",
         answers: finalAnswers,
         ...(reason && { penalty_reason: reason })
@@ -235,33 +241,54 @@ export default function Home() {
 
     console.log('Submitting test data:', submissionData);
 
-    try {
-      await handleAsync(async () => {
+    const maxRetries = 5;
+    const initialDelay = 1000; // 1 second
+
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
         const response = await fetch(SUBMISSION_API_PROXY_ENDPOINT, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(submissionData),
         });
-        if (!response.ok) {
-            const errorData = await response.text();
-            throw new Error(`API submission failed with status ${response.status}: ${errorData}`);
-        }
-        toast({ title: 'Submission Successful', description: 'Your test results have been submitted.' });
-      });
-    } catch (error) {
-        console.error('Failed to submit test results via API:', error);
-        toast({ title: 'Submission Error', description: `Could not submit results: ${error instanceof Error ? error.message : 'Unknown error'}`, variant: 'destructive' });
-    }
+        if (response.ok) {
+            const responseData = await response.json();
+            console.log('Submission successful via API proxy:', responseData);
+            setSubmissionStatusMessage('Submission Successful! Your test results have been submitted.');
+            toast({ title: 'Submission Successful', description: 'Your test results have been submitted.' });
+            setIsSubmitting(false);
 
-    if (window.parent !== window) {
-        window.parent.postMessage({ ...submissionData, type: 'testResults' }, '*');
-        console.log(`Posted ${submissionStatus} test submission to parent.`);
+            if (window.parent !== window) {
+                window.parent.postMessage({ ...submissionData, type: 'testResults', details: responseData }, '*');
+                console.log(`Posted ${submissionStatusType} test submission to parent.`);
+            }
+            return; // Exit after successful submission
+        }
+        const errorData = await response.text();
+        throw new Error(`API submission failed with status ${response.status}: ${errorData}`);
+
+      } catch (error) {
+          console.error(`Submission attempt ${attempt + 1} failed:`, error);
+          if (attempt === maxRetries - 1) {
+              setSubmissionStatusMessage(`Submission Failed. Could not submit results after ${maxRetries} attempts. ${error instanceof Error ? error.message : 'Unknown error'}`);
+              toast({ title: 'Submission Error', description: `Could not submit results after ${maxRetries} attempts: ${error instanceof Error ? error.message : 'Unknown error'}`, variant: 'destructive', duration: 10000 });
+              setIsSubmitting(false);
+              if (window.parent !== window) {
+                  window.parent.postMessage({ ...submissionData, type: 'testSubmissionError', error: error instanceof Error ? error.message : 'Unknown error' }, '*');
+              }
+              return; // Exit after all retries failed
+          }
+          const delay = initialDelay * Math.pow(2, attempt);
+          setSubmissionStatusMessage(`Submission attempt ${attempt + 1} failed. Retrying in ${delay / 1000}s...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+      }
     }
   };
 
   const handlePenalty = useCallback((reason: string) => {
     if (penaltyTriggeredRef.current || !testStarted || testFinished) return;
-    penaltyTriggeredRef.current = true;
+    // No setIsSubmitting here; submitTestResults handles it
+    
     toast({
       title: 'Test Violation Detected',
       description: `${reason}. Your current answers will be submitted, and the test will end.`,
@@ -274,17 +301,19 @@ export default function Home() {
       timerRef.current = null;
     }
     
-    submitTestResults('penalized', reason);
-
+    // Set testFinished true *before* calling submitTestResults
+    // to ensure the UI reflects the end state immediately.
     setTestFinished(true);
     setCurrentQuestionIndex(-1); 
-    setQuestions([]); 
-    setPenaltyQuestions([]); 
+    // setQuestions([]); // Keep questions for final answer capture in submitTestResults if needed
+    // setPenaltyQuestions([]); 
+
+    submitTestResults('penalized', reason); // This will set isSubmitting and submissionStatusMessage
 
     if (document.fullscreenElement) {
       document.exitFullscreen().catch(err => console.error("Error exiting fullscreen:", err));
     }
-  }, [answer, answers, currentQuestionIndex, questions, testStarted, testFinished, studentEmail, matriculationNumber, wixMember, handleAsync]);
+  }, [answer, answers, currentQuestionIndex, questions, testStarted, testFinished, studentEmail, matriculationNumber, wixMember, toast]);
 
 
   const processReceivedQuestions = useCallback((receivedQuestions: Question[]) => {
@@ -525,16 +554,16 @@ export default function Home() {
         setPenaltyQuestions(prev => prev.slice(1));
         setCurrentQuestionIndex(nextIndex);
       } else {
-        setTestFinished(true);
-        setCurrentQuestionIndex(-1);
-        submitTestResults('completed');
+        setTestFinished(true); // Set finished flag
+        setCurrentQuestionIndex(-1); // No active question
+        submitTestResults('completed'); // Submit results
 
         if (document.fullscreenElement) {
           document.exitFullscreen().catch(err => console.error("Error exiting fullscreen:", err));
         }
       }
     }
-  }, [currentQuestionIndex, questions, answer, penaltyQuestions, studentEmail, matriculationNumber, wixMember, answers, handleAsync]);
+  }, [currentQuestionIndex, questions, answer, penaltyQuestions, studentEmail, matriculationNumber, wixMember, answers]);
 
 
   useEffect(() => {
@@ -687,7 +716,7 @@ export default function Home() {
                 type="email"
                 value={studentEmail}
                 onChange={(e) => setStudentEmail(e.target.value)}
-                disabled={testStarted || isAccepting || testFinished}
+                disabled={testStarted || isAccepting || testFinished || isSubmitting}
                 className="bg-white/80 dark:bg-black/30"
               />
             </div>
@@ -698,7 +727,7 @@ export default function Home() {
                 type="text"
                 value={matriculationNumber}
                 onChange={(e) => setMatriculationNumber(e.target.value)}
-                disabled={testStarted || isAccepting || testFinished}
+                disabled={testStarted || isAccepting || testFinished || isSubmitting}
                 className="bg-white/80 dark:bg-black/30"
               />
             </div>
@@ -721,7 +750,7 @@ export default function Home() {
           </CardContent>
         </Card>
 
-        {!testStarted && !isLoading && !testFinished && (
+        {!testStarted && !isLoading && !testFinished && !isSubmitting && (
           <Button
             onClick={handleAccept}
             disabled={isLoading || isAccepting || questions.length === 0 || !wixMember || isWixAuthLoading} 
@@ -737,12 +766,11 @@ export default function Home() {
         {isWixAuthLoading && !testStarted && <p className="text-center text-sm text-muted-foreground">Authenticating with Wix...</p>}
       </div>
 
-      <div ref={rightColumnRef} className="w-full md:w-3/5 p-4 md:p-6 flex flex-col overflow-y-auto">
-        {testStarted && !testFinished && currentQuestion ? (
-          <div className="flex flex-col space-y-4 fade-in"> {/* Removed h-full here to allow natural height */}
-            {/* Progress Section */}
+      <div ref={rightColumnRef} className="w-full md:w-3/5 p-2 sm:p-4 md:p-6 flex flex-col overflow-y-auto">
+        {testStarted && !testFinished && !isSubmitting && currentQuestion ? (
+          <div className="flex flex-col space-y-4 fade-in">
             <div className="mb-4 glass p-4 rounded-lg">
-              <div className="flex flex-col sm:flex-row justify-between items-center mb-3"> {/* Stack on mobile, row on sm+ */}
+              <div className="flex flex-col sm:flex-row justify-between items-center mb-3">
                 <p className="text-lg font-semibold text-foreground mb-2 sm:mb-0">
                   Question {Math.min(completedQuestions + 1, totalMainQuestions)}
                   {penaltyQuestions.length > 0 ? ` (+${penaltyQuestions.length} penalties)` : ''}
@@ -777,19 +805,17 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Question Display Card */}
-            <Card className="flex flex-col glass"> {/* Removed flex-grow, min-h-0 */}
+            <Card className="flex flex-col glass">
               <CardHeader>
                 <CardTitle>Question {completedQuestions + 1}</CardTitle>
               </CardHeader>
-              <CardContent className="flex flex-col space-y-4"> {/* Removed flex-grow, min-h-0 */}
+              <CardContent className="flex flex-col space-y-4">
                 <div
-                  className="p-4 border border-border rounded-md bg-white/50 dark:bg-black/20 overflow-auto min-h-[8.75rem] max-h-[17.5rem]" /* Adjusted: removed flex-grow, added min/max height */
+                  className="p-4 border border-border rounded-md bg-white/50 dark:bg-black/20 overflow-auto min-h-[8.75rem] max-h-[17.5rem]"
                 >
                   <p className="text-lg whitespace-pre-wrap break-words">{currentQuestion.query}</p>
                 </div>
 
-                {/* Answer Input: MCQ or Textarea */}
                 {currentQuestion.type === 'MCQ' && Array.isArray(currentQuestion.options) ? (
                   <RadioGroup
                     value={answer}
@@ -812,11 +838,10 @@ export default function Home() {
                     value={answer}
                     onChange={(e) => setAnswer(e.target.value)}
                      onFocus={(e) => {
-                        if (window.visualViewport && window.innerWidth < 768) { // Only for mobile-like viewports
+                        if (window.visualViewport && window.innerWidth < 768) {
                              const targetRect = e.target.getBoundingClientRect();
                              const viewportHeight = window.visualViewport?.height || window.innerHeight;
-                             // Check if the bottom of the textarea is close to or below the bottom of the visual viewport
-                             if (targetRect.bottom > viewportHeight - 50) { // 50px buffer
+                             if (targetRect.bottom > viewportHeight - 50) { 
                                  e.target.scrollIntoView({ behavior: 'smooth', block: 'center' });
                              }
                         }
@@ -838,7 +863,7 @@ export default function Home() {
                       };
                       targetElement.addEventListener('touchend', touchendHandler);
                     }}
-                    className="min-h-[150px] text-base bg-white/80 dark:bg-black/30" /* Removed flex-shrink-0 */
+                    className="min-h-[150px] text-base bg-white/80 dark:bg-black/30"
                     aria-label="Answer input area"
                   />
                 )}
@@ -853,6 +878,16 @@ export default function Home() {
               {currentQuestionIndex < questions.length - 1 || penaltyQuestions.length > 0 ? 'Submit Answer & Next' : 'Submit Final Answer'}
             </Button>
           </div>
+        ) : isSubmitting ? (
+           <Card className="m-auto p-8 text-center glass">
+            <CardHeader>
+              <CardTitle className="text-2xl">Submitting Test</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Loader2 className="mx-auto h-12 w-12 animate-spin text-accent" />
+              <CardDescription>{submissionStatusMessage || 'Processing your answers...'}</CardDescription>
+            </CardContent>
+          </Card>
         ) : testFinished ? (
           <Card className="m-auto p-8 text-center glass">
             <CardHeader>
@@ -860,9 +895,9 @@ export default function Home() {
             </CardHeader>
             <CardContent>
               <CardDescription>
-                {penaltyTriggeredRef.current
+                {submissionStatusMessage || (penaltyTriggeredRef.current
                   ? 'Your answers have been submitted due to a test violation.'
-                  : 'Your answers have been submitted successfully.'}
+                  : 'Your answers have been submitted successfully.')}
               </CardDescription>
               <p className="mt-4">You may now close this window.</p>
             </CardContent>
@@ -888,7 +923,3 @@ export default function Home() {
     </div>
   );
 }
-
-    
-
-    
