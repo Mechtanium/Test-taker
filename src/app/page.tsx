@@ -451,7 +451,7 @@ export default function Home() {
           if (currentQForEffect.type !== 'MCQ' && answerTextareaRef.current) {
             answerTextareaRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
           } else if (currentQForEffect.type === 'MCQ' && rightColumnRef.current) {
-             rightColumnRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+             rightColumnRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
           }
         }
       }
@@ -651,33 +651,10 @@ export default function Home() {
     return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
   };
 
-  const [keyboardOffset, setKeyboardOffset] = useState(0);
-  useEffect(() => {
-    const visualViewport = window.visualViewport;
-    if (!visualViewport) return;
-
-    const handleVisualViewportResize = () => {
-        const newOffset = Math.max(0, window.innerHeight - visualViewport.height);
-        setKeyboardOffset(newOffset > 150 ? newOffset + 100 : 0);
-
-        if (newOffset > 150 && (document.activeElement === answerTextareaRef.current || rightColumnRef.current?.contains(document.activeElement))) {
-          setTimeout(() => {
-            document.activeElement?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          }, 100); 
-        }
-    };
-    visualViewport.addEventListener('resize', handleVisualViewportResize);
-    handleVisualViewportResize();
-
-    return () => visualViewport.removeEventListener('resize', handleVisualViewportResize);
-  }, []);
-
-
   return (
     <div
       ref={containerRef}
       className="flex flex-col md:flex-row h-full w-full bg-background text-foreground pointillism transition-all duration-300 ease-in-out"
-      style={{ paddingBottom: `${keyboardOffset}px`}}
       onCopy={(e) => handleAnswerEventPrevent(e, 'Copy')}
       onCut={(e) => handleAnswerEventPrevent(e, 'Cut')}
       onPaste={(e) => handleAnswerEventPrevent(e, 'Paste')}
@@ -767,7 +744,7 @@ export default function Home() {
             <div className="mb-4 glass p-4 rounded-lg">
               <div className="flex flex-col sm:flex-row justify-between items-center mb-3"> {/* Stack on mobile, row on sm+ */}
                 <p className="text-lg font-semibold text-foreground mb-2 sm:mb-0">
-                  Question {Math.min(completedQuestions + 1, totalMainQuestions)} of {totalMainQuestions}
+                  Question {Math.min(completedQuestions + 1, totalMainQuestions)}
                   {penaltyQuestions.length > 0 ? ` (+${penaltyQuestions.length} penalties)` : ''}
                 </p>
                 <div className="text-2xl font-mono font-semibold text-accent">
@@ -835,10 +812,11 @@ export default function Home() {
                     value={answer}
                     onChange={(e) => setAnswer(e.target.value)}
                      onFocus={(e) => {
-                        if (window.visualViewport && window.innerWidth < 768) {
+                        if (window.visualViewport && window.innerWidth < 768) { // Only for mobile-like viewports
                              const targetRect = e.target.getBoundingClientRect();
                              const viewportHeight = window.visualViewport?.height || window.innerHeight;
-                             if (targetRect.bottom > viewportHeight - 50) {
+                             // Check if the bottom of the textarea is close to or below the bottom of the visual viewport
+                             if (targetRect.bottom > viewportHeight - 50) { // 50px buffer
                                  e.target.scrollIntoView({ behavior: 'smooth', block: 'center' });
                              }
                         }
@@ -910,5 +888,7 @@ export default function Home() {
     </div>
   );
 }
+
+    
 
     
