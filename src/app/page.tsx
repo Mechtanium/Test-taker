@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
@@ -15,6 +16,7 @@ import LoginBar from '@/components/LoginBar';
 import { myWixClient, removeTokensFromCookie } from '@/lib/wix-client';
 import type { Member } from '@/lib/utils';
 import { useAsyncHandler } from '@/hooks/useAsyncHandler';
+import { cn } from '@/lib/utils';
 
 interface QuestionOption {
   text: string;
@@ -241,7 +243,7 @@ export default function Home() {
 
     console.log('Submitting test data:', submissionData);
 
-    const maxRetries = 5;
+    const maxRetries = 5; // Adjusted to 5 as per last user interaction
     const initialDelay = 1000; // 1 second
 
     for (let attempt = 0; attempt < maxRetries; attempt++) {
@@ -287,7 +289,6 @@ export default function Home() {
 
   const handlePenalty = useCallback((reason: string) => {
     if (penaltyTriggeredRef.current || !testStarted || testFinished) return;
-    // No setIsSubmitting here; submitTestResults handles it
     
     toast({
       title: 'Test Violation Detected',
@@ -301,18 +302,15 @@ export default function Home() {
       timerRef.current = null;
     }
     
-    // Set testFinished true *before* calling submitTestResults
-    // to ensure the UI reflects the end state immediately.
     setTestFinished(true);
     setCurrentQuestionIndex(-1); 
-    // setQuestions([]); // Keep questions for final answer capture in submitTestResults if needed
-    // setPenaltyQuestions([]); 
 
-    submitTestResults('penalized', reason); // This will set isSubmitting and submissionStatusMessage
+    submitTestResults('penalized', reason); 
 
     if (document.fullscreenElement) {
       document.exitFullscreen().catch(err => console.error("Error exiting fullscreen:", err));
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [answer, answers, currentQuestionIndex, questions, testStarted, testFinished, studentEmail, matriculationNumber, wixMember, toast]);
 
 
@@ -554,15 +552,16 @@ export default function Home() {
         setPenaltyQuestions(prev => prev.slice(1));
         setCurrentQuestionIndex(nextIndex);
       } else {
-        setTestFinished(true); // Set finished flag
-        setCurrentQuestionIndex(-1); // No active question
-        submitTestResults('completed'); // Submit results
+        setTestFinished(true); 
+        setCurrentQuestionIndex(-1); 
+        submitTestResults('completed'); 
 
         if (document.fullscreenElement) {
           document.exitFullscreen().catch(err => console.error("Error exiting fullscreen:", err));
         }
       }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentQuestionIndex, questions, answer, penaltyQuestions, studentEmail, matriculationNumber, wixMember, answers]);
 
 
@@ -690,7 +689,12 @@ export default function Home() {
       onDragStart={(e) => handleAnswerEventPrevent(e, 'Drag')}
       onDrop={(e) => handleAnswerEventPrevent(e, 'Drop')}
     >
-      <div className="w-full md:w-2/5 p-4 md:p-6 border-r border-border flex flex-col space-y-6 glass overflow-y-auto">
+      <div 
+        className={cn(
+          "p-4 md:p-6 border-r border-border flex flex-col space-y-6 glass overflow-y-auto md:w-2/5", 
+          testStarted ? "hidden md:flex" : "w-full"
+        )}
+      >
         <div className="flex justify-between items-start mb-4">
             <div>
                 <AnnahAiLogo className="w-[180px] h-auto" />
