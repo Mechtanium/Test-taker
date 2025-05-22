@@ -19,7 +19,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'Test taker',
+  title: 'Test Taker',
   description: 'Secure Browser Testing Environment',
 };
 
