@@ -51,7 +51,7 @@
     *   Two-column layout (approx. 40:60 ratio on desktop: `md:w-2/5` and `md:w-3/5`):
         *   Left Pane: AnnahAI Logo, Wix Login controls, Student info, Test info, Instructions. Hidden on mobile after test start.
         *   Right Pane: Test questions, timer, answer input/options, progress bars, status cards. Takes full width on mobile when left pane is hidden.
-    *   On mobile, panes stack vertically.
+    *   On mobile, panes stack vertically. The right pane's content is arranged in a single scrollable column.
 *   **Effects & Animations**:
     *   Subtle fade-in animation for new questions (`fade-in` class).
     *   Pointillism background pattern (`pointillism` class).
@@ -64,25 +64,25 @@
 ## Key Dependencies (from `package.json`):
 
 *   **Framework & UI**:
-    *   `next`: ^15.2.3 (or current version)
-    *   `react`: ^18.3.1
-    *   `react-dom`: ^18.3.1
+    *   `next`: (Check `package.json` for specific version, e.g., ^15.2.3)
+    *   `react`: (Check `package.json` for specific version, e.g., ^18.3.1)
+    *   `react-dom`: (Check `package.json` for specific version, e.g., ^18.3.1)
 *   **Wix Integration**:
-    *   `@wix/sdk`: ^1.13.0 (or current version)
-    *   `@wix/members`: ^1.0.114 (or current version)
+    *   `@wix/sdk`: (Check `package.json` for specific version, e.g., ^1.13.0)
+    *   `@wix/members`: (Check `package.json` for specific version, e.g., ^1.0.114)
 *   **Client-Side Utilities**:
-    *   `js-cookie`: ^3.0.5
+    *   `js-cookie`: (Check `package.json` for specific version, e.g., ^3.0.5)
 *   **Styling & UI Components**:
-    *   `tailwindcss`: ^3.4.1
-    *   `tailwindcss-animate`: ^1.0.7
-    *   `lucide-react`: ^0.475.0 (or current version)
-    *   `class-variance-authority`: ^0.7.1
-    *   `clsx`: ^2.1.1
-    *   `tailwind-merge`: ^3.0.1
+    *   `tailwindcss`: (Check `package.json` for specific version, e.g., ^3.4.1)
+    *   `tailwindcss-animate`: (Check `package.json` for specific version, e.g., ^1.0.7)
+    *   `lucide-react`: (Check `package.json` for specific version, e.g., ^0.475.0)
+    *   `class-variance-authority`: (Check `package.json` for specific version, e.g., ^0.7.1)
+    *   `clsx`: (Check `package.json` for specific version, e.g., ^2.1.1)
+    *   `tailwind-merge`: (Check `package.json` for specific version, e.g., ^3.0.1)
     *   Various `@radix-ui/*` packages for ShadCN components (e.g., `react-label`, `react-progress`, `react-radio-group`, `react-dialog`, `react-toast`).
 *   **State Management (Implicit)**: React Context API (`LoadingContext`, `ModalContext`).
 *   **Type Checking & Linting**:
-    *   `typescript`: ^5
+    *   `typescript`: (Check `package.json` for specific version, e.g., ^5)
     *   `eslint`, `eslint-config-next`
 
 ## Data Objects and Types (Key Interfaces in `src/app/page.tsx`):
@@ -122,8 +122,8 @@
         longitude: number;
         description?: string;
       };
-      attempts?: number; // Example field from new data
-      course_id?: string; // Example field from new data
+      attempts?: number; // Example field from fetched data
+      course_id?: string; // Example field from fetched data
     }
     ```
 *   **Wix `Member` Object (from Wix SDK, relevant parts)**:
