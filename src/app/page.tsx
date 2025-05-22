@@ -243,7 +243,7 @@ export default function Home() {
 
     console.log('Submitting test data:', submissionData);
 
-    const maxRetries = 5; // Adjusted to 5 as per last user interaction
+    const maxRetries = 7; // Changed from 5 to 7
     const initialDelay = 1000; // 1 second
 
     for (let attempt = 0; attempt < maxRetries; attempt++) {
@@ -444,6 +444,7 @@ export default function Home() {
   useEffect(() => {
     if (!testStarted || testFinished) return;
     
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- currentQuestion is derived for this effect
     const currentQForEffect = questions[currentQuestionIndex];
   
     const handleVisibilityChange = () => {
@@ -691,8 +692,8 @@ export default function Home() {
     >
       <div 
         className={cn(
-          "p-4 md:p-6 border-r border-border flex flex-col space-y-6 glass overflow-y-auto md:w-2/5", 
-          testStarted ? "hidden md:flex" : "w-full"
+          "p-4 md:p-6 border-r border-border flex flex-col space-y-6 glass overflow-y-auto", 
+          testStarted ? "hidden md:flex md:w-2/5" : "w-full md:w-2/5"
         )}
       >
         <div className="flex justify-between items-start mb-4">
@@ -927,3 +928,4 @@ export default function Home() {
     </div>
   );
 }
+
