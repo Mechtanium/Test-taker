@@ -26,6 +26,9 @@ const nextConfig: NextConfig = {
           {
             key: 'Content-Security-Policy',
             value: "frame-ancestors 'self' https://sapiensng.wixstudio.com;",
+          },{
+            key: 'Content-Security-Policy',
+            value: "frame-ancestors 'self' https://studio.firebase.google.com;",
           },
         ],
       },

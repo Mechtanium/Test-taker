@@ -10,7 +10,7 @@ import { Progress } from '@/components/ui/progress';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from '@/hooks/use-toast';
-import { Loader2 } from 'lucide-react';
+import { Loader2, MapPin } from 'lucide-react'; // Added MapPin
 import AnnahAiLogo from '@/components/annah-ai-logo';
 import LoginBar from '@/components/LoginBar';
 import { myWixClient, removeTokensFromCookie } from '@/lib/wix-client';
@@ -38,6 +38,25 @@ interface Answer {
   answer: string;
   timeTaken: number; // in milliseconds
 }
+
+interface TestInfo {
+  _id: string;
+  title: string;
+  start: string;
+  stop: string;
+  date: string;
+  instructions?: string;
+  banner?: string;
+  geolocation?: {
+    latitude: number;
+    longitude: number;
+    description?: string;
+  };
+  // Add any other relevant fields from test_info if needed
+  attempts?: number;
+  course_id?: string;
+}
+
 
 const questionTypeOrder: Question['type'][] = ["MCQ", "G_OBJ", "SHORT", "PARAGRAPH"];
 const SUBMISSION_API_PROXY_ENDPOINT = "/api/submit-assessment";
@@ -97,6 +116,7 @@ export default function Home() {
   const [isWixAuthLoading, setIsWixAuthLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [submissionStatusMessage, setSubmissionStatusMessage] = useState<string>('');
+  const [testInfo, setTestInfo] = useState<TestInfo | null>(null);
 
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
@@ -243,7 +263,7 @@ export default function Home() {
 
     console.log('Submitting test data:', submissionData);
 
-    const maxRetries = 7; // Changed from 5 to 7
+    const maxRetries = 7;
     const initialDelay = 1000; // 1 second
 
     for (let attempt = 0; attempt < maxRetries; attempt++) {
@@ -324,33 +344,39 @@ export default function Home() {
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
-      if (event.data?.type === 'questionsLoaded' && Array.isArray(event.data.questions)) {
-         const transformedQuestionsFromMessage = event.data.questions.map((q: any) => {
-            let newOptions: string[] | undefined = undefined;
-            if (q.type === "MCQ" && Array.isArray(q.options)) {
-              if (q.options.length > 0 && typeof q.options[0] === 'object' && q.options[0] !== null && 'text' in q.options[0]) {
-                newOptions = q.options.map((opt: any) => opt.text as string);
-              } else if (q.options.length > 0 && typeof q.options[0] === 'string') {
-                newOptions = q.options as string[];
-              } else {
-                newOptions = [];
-              }
-            }
-            return { ...q, options: newOptions };
-          });
+       if (event.data?.type === 'questionsLoaded') {
+         const receivedData = event.data;
+         if (Array.isArray(receivedData.questions)) {
+            const transformedQuestionsFromMessage = receivedData.questions.map((q: any) => {
+                let newOptions: string[] | undefined = undefined;
+                if (q.type === "MCQ" && Array.isArray(q.options)) {
+                  if (q.options.length > 0 && typeof q.options[0] === 'object' && q.options[0] !== null && 'text' in q.options[0]) {
+                    newOptions = q.options.map((opt: any) => opt.text as string);
+                  } else if (q.options.length > 0 && typeof q.options[0] === 'string') {
+                    newOptions = q.options as string[];
+                  } else {
+                    newOptions = [];
+                  }
+                }
+                return { ...q, options: newOptions };
+              });
 
-        if (transformedQuestionsFromMessage.length > 0 && transformedQuestionsFromMessage[0]?.query) {
-          processReceivedQuestions(transformedQuestionsFromMessage as Question[]);
-        } else if (transformedQuestionsFromMessage.length === 0) {
-          setQuestions([]);
-          setIsLoading(false);
-          console.log('Received empty questions list from parent.');
-          toast({
-            title: 'No Questions',
-            description: 'The test has no questions loaded from the parent.',
-            variant: 'destructive'
-          });
-        }
+            if (transformedQuestionsFromMessage.length > 0 && transformedQuestionsFromMessage[0]?.query) {
+              processReceivedQuestions(transformedQuestionsFromMessage as Question[]);
+            } else if (transformedQuestionsFromMessage.length === 0) {
+              setQuestions([]);
+              setIsLoading(false);
+              console.log('Received empty questions list from parent.');
+              toast({
+                title: 'No Questions',
+                description: 'The test has no questions loaded from the parent.',
+                variant: 'destructive'
+              });
+            }
+         }
+         if (receivedData.test_info) {
+            setTestInfo(receivedData.test_info as TestInfo);
+         }
       } else if (event.data === 'TestLockReady') {
         console.log('Parent window acknowledged TestLockReady.');
       }
@@ -377,6 +403,9 @@ export default function Home() {
           })
           .then(data => {
             console.log('Fetched data via proxy:', data);
+            if (data && data.test_info) {
+                setTestInfo(data.test_info as TestInfo);
+            }
             if (data && data.questions && Array.isArray(data.questions)) {
               const transformedQuestions = data.questions.map((q: any) => {
                 let newOptions: string[] | undefined = undefined;
@@ -444,7 +473,6 @@ export default function Home() {
   useEffect(() => {
     if (!testStarted || testFinished) return;
     
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- currentQuestion is derived for this effect
     const currentQForEffect = questions[currentQuestionIndex];
   
     const handleVisibilityChange = () => {
@@ -708,6 +736,38 @@ export default function Home() {
                 isLoading={isWixAuthLoading}
             />
         </div>
+
+        {testInfo && !testStarted && (
+          <Card className="mb-0 glass"> {/* Reduced mb-6 to mb-0 or small value if needed */}
+            <CardHeader className="pb-3 pt-4"> {/* Adjusted padding */}
+              <CardTitle className="text-xl">{testInfo.title}</CardTitle> {/* Slightly smaller title if needed */}
+            </CardHeader>
+            <CardContent className="space-y-3 pt-0 pb-4"> {/* Adjusted padding and spacing */}
+              <div className="flex justify-between items-center text-sm">
+                <div>
+                  <p className="text-xs text-muted-foreground">Start Time</p>
+                  <p className="font-semibold text-accent">{testInfo.start?.substring(0, 5)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground text-right">End Time</p>
+                  <p className="font-semibold text-destructive">{testInfo.stop?.substring(0, 5)}</p>
+                </div>
+              </div>
+              {testInfo.geolocation && (
+                <a
+                  href={`https://www.google.com/maps?q=${testInfo.geolocation.latitude},${testInfo.geolocation.longitude}${testInfo.geolocation.description ? `+(${encodeURIComponent(testInfo.geolocation.description)})` : ''}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center space-x-2 text-xs text-foreground hover:text-accent transition-colors"
+                >
+                  <MapPin className="h-4 w-4" />
+                  <span>View test location</span>
+                </a>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
 
         <Card className="glass">
           <CardHeader>
