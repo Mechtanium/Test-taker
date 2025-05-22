@@ -20,8 +20,21 @@
     ],
     "paths": {
       "@/*": ["./src/*"]
-    }
+    },
+    "types": ["jest", "node", "@playwright/test"]
   },
-  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts",
+    "jest.config.js",
+    "jest.setup.js",
+    "playwright.config.ts",
+    "tests/**/*.ts",
+    "tests/**/*.tsx",
+    "__mocks__/**/*.ts",
+    "__mocks__/**/*.tsx"
+  ],
   "exclude": ["node_modules"]
 }
