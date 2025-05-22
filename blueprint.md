@@ -4,90 +4,88 @@
 ## Core Features:
 
 *   **Secure Testing Environment**:
-    *   **Disable Copy/Paste**: Prevents copy/paste in the answer textarea to deter cheating. Other input fields (student email, matriculation) allow normal copy/paste.
+    *   **Disable Copy/Paste in Answer Area**: Prevents copy/paste actions (copy, cut, paste) specifically within the answer textarea to deter cheating. Other input fields (student email, matriculation number) allow normal copy/paste. Drag and drop actions are also disabled in the answer area.
     *   **Page Security Monitoring**: Detects page visibility changes (tab switching, minimizing) and significant window resizing (excluding normal orientation changes or keyboard popups). Such events trigger a penalty, submitting current answers and ending the test.
     *   **Fullscreen Mode**: Requires users to enter fullscreen mode after providing student details and before starting the test. Exiting fullscreen also triggers a penalty.
 *   **Authentication & User Identification**:
-    *   **Wix Member Login**: Integrates with Wix SDK for user authentication. Users must log in before starting a test.
-    *   **Student Information**: Collects "Student email" and "Matriculation number" before the test begins.
-    *   **Owner Attribution**: Associates test submissions with the logged-in Wix Member ID.
+    *   **Wix Member Login**: Integrates with Wix SDK for user authentication via OAuth. Users must log in before starting a test. The logged-in member's ID (`_owner`) is associated with the test submission.
+    *   **Student Information**: Collects "Student email" and "Matriculation number" before the test begins. These fields are disabled after the test starts.
 *   **Test Data Handling**:
     *   **Dynamic Test Loading**:
-        *   **Parent Frame Communication**: Can receive test questions and information (test title, instructions, timing, geolocation) via `window.postMessage` when embedded in an iframe.
-        *   **Direct API Fetch**: When standalone, fetches test questions and information from an external API (`https://sapiensng.wixsite.com/annah-ai/_functions-dev/test`) via a Next.js proxy route (`/api/test-proxy`). Requires a `q` URL parameter for the test ID.
-    *   **Test Availability**: Checks if the current system time is within the test's scheduled start and late start window. Displays "Test Unavailable" messages if outside this window.
+        *   **Parent Frame Communication**: Can receive test questions and test information (title, instructions, timing, geolocation) via `window.postMessage` when embedded in an iframe.
+        *   **Direct API Fetch (Standalone Mode)**: When not in an iframe, fetches test questions and information from an external API (`https://sapiensng.wixsite.com/annah-ai/_functions-dev/test`) via a Next.js proxy route (`/api/test-proxy`). Requires a `q` URL query parameter for the test ID.
+    *   **Test Availability Check**:
+        *   Verifies if the current system time is within the test's scheduled `start` time and `stop` (late start) time, based on `test_info.date`.
+        *   Displays "Test Unavailable" messages if the current time is outside this window (too early or too late).
+        *   If `start` time is missing, the test is assumed available. If `date` is missing, current day is assumed. If `stop` time is missing, only `start` time is checked.
 *   **Test Progression & Question Handling**:
-    *   **Timed Question Display**: Shows one question at a time with a countdown timer based on `dur_millis` for each question.
+    *   **Timed Question Display**: Shows one question at a time. Each question has an individual countdown timer based on its `dur_millis` property.
     *   **Question Types**: Supports "MCQ" (Multiple Choice Questions), "G_OBJ" (General Objective), "SHORT" (Short Answer), and "PARAGRAPH" (Essay) type questions.
-    *   **Question Sorting & Randomization**: Sorts questions by type ("MCQ" -> "G_OBJ" -> "SHORT" -> "PARAGRAPH") before the test begins. Within each type group, questions are randomized.
-    *   **Answer Capture**: Captures user responses and time taken for each question.
+    *   **Question Sorting & Randomization**: Before the test begins, questions are sorted by type in the order: "MCQ" -> "G_OBJ" -> "SHORT" -> "PARAGRAPH". Within each type group, questions are randomized.
+    *   **Answer Capture**: Captures user responses and the time taken for each question.
     *   **Automatic Advancement**: Moves to the next question when the timer expires or when the user submits an answer.
-    *   **Progress Display**: Shows progress bars for each question type, indicating answered questions versus the total for that type.
+    *   **Progress Display**: Shows progress bars for each question type ("MCQ", "G_OBJ", "SHORT", "PARAGRAPH"), indicating the number of answered questions versus the total for that type.
     *   **Auto-Focus**: Automatically focuses the answer textarea for non-MCQ questions when a new question is displayed.
 *   **Submission**:
-    *   **Secure Submission**: Submits captured answers, student information, Wix Member ID, test ID, and status ("completed" or "penalized") to an external API (`https://sapiensng.wixsite.com/annah-ai/_functions-dev/save_assessment`) via a Next.js proxy route (`/api/submit-assessment`).
-    *   **Retry Mechanism**: Implements an exponential backoff strategy (up to 7 retries) for submissions.
-    *   **Parent Frame Notification**: Posts submission results/errors to the parent window if embedded.
+    *   **Secure Submission**: Submits captured answers, student information, Wix Member ID (`_owner`), test ID, and status ("completed" or "penalized") to an external API (`https://sapiensng.wixsite.com/annah-ai/_functions-dev/save_assessment`) via a Next.js proxy route (`/api/submit-assessment`).
+    *   **Retry Mechanism**: Implements an exponential backoff strategy (up to 7 retries) for submission attempts. An error toast is shown only after all retries fail.
+    *   **Parent Frame Notification**: Posts submission results/errors to the parent window if embedded in an iframe.
 *   **UI & User Experience**:
-    *   **Responsive Design**: Adapts layout for mobile and desktop. Left pane (info/instructions) hides on mobile after the test starts.
-    *   **Minimalist Theme**: Clean, distraction-free interface with pointillism and glass translucency effects.
-    *   **Test Information Display**: Shows test title, start/late start times, and a link to the test location on Google Maps.
+    *   **Responsive Design**: Adapts layout for mobile and desktop.
+        *   On mobile screens (`<md`), the left pane (student info, test info, instructions, login controls) is hidden after the test starts to maximize space for the question area.
+    *   **Minimalist Modern Theme**: Clean, distraction-free interface with subtle visual effects.
+        *   Uses a "pointillism" background pattern.
+        *   Cards have a "glass" translucency effect.
+    *   **Test Information Display**: Shows test title, start and late start times, and a link to the test location on Google Maps (if geolocation data is provided).
     *   **Loading States**: Displays loading indicators during data fetching and submission.
+    *   **Status Cards**: Shows "Waiting to Start", "Test Unavailable", "Submitting Test", and "Test Finished" cards in the right pane based on the application state.
 
 ## Style Guidelines:
 
 *   **Primary Colors**:
     *   Background: White or light grey (`hsl(var(--background))`).
     *   Text/Foreground: Dark grey (`hsl(var(--foreground))`).
-*   **Accent Color**: `#38C68B` (HSL: `153 58% 54%`) used for timers, submit buttons, and highlights.
-*   **Destructive Color**: Standard red used for error states/warnings (e.g., late start time, destructive toast variant).
+*   **Accent Color**: `#38C68B` (HSL: `153 58% 54%`) used for timers, submit buttons, progress bar indicators, and highlights (e.g., test start time).
+*   **Destructive Color**: Standard red (`hsl(var(--destructive))`) used for error states, warnings (e.g., test late start time, destructive toast variant).
 *   **Layout**:
-    *   Two-column layout (40:60 ratio on desktop):
-        *   Left: Student info, test info, instructions, login controls.
-        *   Right: Test questions, timer, answer input.
-    *   On mobile, panes stack vertically. Left pane hides after test starts.
+    *   Two-column layout (approx. 40:60 ratio on desktop: `md:w-2/5` and `md:w-3/5`):
+        *   Left Pane: AnnahAI Logo, Wix Login controls, Student info, Test info, Instructions. Hidden on mobile after test start.
+        *   Right Pane: Test questions, timer, answer input/options, progress bars, status cards. Takes full width on mobile when left pane is hidden.
+    *   On mobile, panes stack vertically.
 *   **Effects & Animations**:
-    *   Subtle fade-in animation for new questions.
+    *   Subtle fade-in animation for new questions (`fade-in` class).
     *   Pointillism background pattern (`pointillism` class).
-    *   Glass translucency effect for cards (`glass` class).
-*   **Typography**: Uses Geist Sans and Geist Mono fonts.
-*   **Components**: Leverages ShadCN UI components for a consistent look and feel.
+    *   Glass translucency effect for cards (`glass` class, applied to cards and specific sections).
+*   **Typography**: Uses Geist Sans (variable: `--font-geist-sans`) and Geist Mono (variable: `--font-geist-mono`) fonts.
+*   **Components**: Leverages ShadCN UI components for a consistent look and feel (e.g., Card, Button, Input, Progress, RadioGroup, Label, Toast).
 *   **CSS Framework**: Tailwind CSS for utility-first styling.
-*   **Icons**: Uses `lucide-react` for iconography (e.g., `MapPin`, `Loader2`).
+*   **Icons**: Uses `lucide-react` for iconography (e.g., `MapPin`, `Loader2`, `UserCircle2`, `LogIn`, `LogOut`).
 
 ## Key Dependencies (from `package.json`):
 
 *   **Framework & UI**:
-    *   `next`: ^15.2.3
+    *   `next`: ^15.2.3 (or current version)
     *   `react`: ^18.3.1
     *   `react-dom`: ^18.3.1
 *   **Wix Integration**:
-    *   `@wix/sdk`: ^1.13.0
-    *   `@wix/members`: ^1.0.114
+    *   `@wix/sdk`: ^1.13.0 (or current version)
+    *   `@wix/members`: ^1.0.114 (or current version)
 *   **Client-Side Utilities**:
     *   `js-cookie`: ^3.0.5
 *   **Styling & UI Components**:
     *   `tailwindcss`: ^3.4.1
     *   `tailwindcss-animate`: ^1.0.7
-    *   `lucide-react`: ^0.475.0
+    *   `lucide-react`: ^0.475.0 (or current version)
     *   `class-variance-authority`: ^0.7.1
     *   `clsx`: ^2.1.1
     *   `tailwind-merge`: ^3.0.1
-    *   Various `@radix-ui/*` packages for ShadCN components (e.g., `react-label`, `react-progress`, `react-radio-group`, `react-dialog`).
-*   **Form Handling**:
-    *   `react-hook-form`: ^7.54.2
-    *   `@hookform/resolvers`: ^4.1.3
-*   **Date Handling**:
-    *   `date-fns`: ^3.6.0
-*   **AI (Genkit - currently included but not actively used in core test features)**:
-    *   `genkit`: ^1.6.2
-    *   `@genkit-ai/googleai`: ^1.6.2
-    *   `@genkit-ai/next`: ^1.6.2
+    *   Various `@radix-ui/*` packages for ShadCN components (e.g., `react-label`, `react-progress`, `react-radio-group`, `react-dialog`, `react-toast`).
+*   **State Management (Implicit)**: React Context API (`LoadingContext`, `ModalContext`).
 *   **Type Checking & Linting**:
     *   `typescript`: ^5
-    *   `zod`: ^3.24.2
+    *   `eslint`, `eslint-config-next`
 
-## Data Objects and Types:
+## Data Objects and Types (Key Interfaces in `src/app/page.tsx`):
 
 *   **`Question` Interface**:
     ```typescript
@@ -97,7 +95,7 @@
       test_id: string;
       type: "MCQ" | "G_OBJ" | "SHORT" | "PARAGRAPH";
       dur_millis: number;
-      options?: string[]; // For MCQ, options are processed into an array of strings
+      options?: string[]; // For MCQ, options are processed into an array of strings (option texts)
     }
     ```
 *   **`Answer` Interface**:
@@ -114,24 +112,24 @@
     interface TestInfo {
       _id: string;
       title: string;
-      start: string; // HH:MM:SS.sss
-      stop: string;  // HH:MM:SS.sss (late start)
-      date: string;  // YYYY-MM-DD or full ISO
+      start: string; // HH:MM:SS.sss (e.g., "07:20:00.000")
+      stop: string;  // HH:MM:SS.sss (late start time, e.g., "08:20:00.000")
+      date: string;  // YYYY-MM-DD or full ISO string (e.g., "2025-05-30T23:00:00.000Z")
       instructions?: string;
-      banner?: string; // URL
+      banner?: string; // URL for a banner image
       geolocation?: {
         latitude: number;
         longitude: number;
         description?: string;
       };
-      attempts?: number;
-      course_id?: string;
+      attempts?: number; // Example field from new data
+      course_id?: string; // Example field from new data
     }
     ```
-*   **`Member` Object (from Wix SDK)**: Key fields used:
+*   **Wix `Member` Object (from Wix SDK, relevant parts)**:
     *   `_id`: Wix Member ID, used as `_owner` in submission.
-    *   `profile.nickname`: For display.
-    *   `contact.firstName`: For display.
+    *   `profile.nickname`: Used for display in LoginBar.
+    *   `contact.firstName`: Fallback for display name.
 *   **Submission Data Structure (to `/api/submit-assessment`)**:
     ```json
     {
@@ -164,3 +162,5 @@
 6.  Use the "Submit Answer & Next" or "Submit Final Answer" button to move to the next question manually.
 
 This document should serve as a good overview of the TestLock application.
+
+    
