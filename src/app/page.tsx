@@ -360,11 +360,10 @@ export default function Home() {
     const processed = sortAndGroupQuestions(receivedQuestions);
     setQuestions(processed);
     setIsLoading(false); // Set loading to false once questions are processed
-    console.log('Processed and sorted questions:', processed);
   }, []);
 
   useEffect(() => {
-    if (isLoading && testInfo) { // Only check availability if testInfo is loaded
+    if (testInfo) { // Only check availability if testInfo is loaded
       const currentTime = new Date();
 
       if (!testInfo.start) {
@@ -458,7 +457,6 @@ export default function Home() {
     };
 
     window.addEventListener('message', handleMessage);
-    console.log('Message listener added.');
 
     // Fetch data if not in iframe
     if (window.parent === window) {
@@ -470,7 +468,6 @@ export default function Home() {
 
       if (testId) {
         const apiUrl = `${TEST_DATA_API_PROXY_ENDPOINT}?test=${testId}`;
-        console.log(`Fetching data from: ${apiUrl}`);
         fetch(apiUrl)
           .then(response => {
             if (!response.ok) {
@@ -479,7 +476,6 @@ export default function Home() {
             return response.json();
           })
           .then(data => {
-            console.log('Fetched data via proxy:', data);
             if (data && data.test_info) {
               setTestInfo(data.test_info as TestInfo);
             } else {
@@ -790,7 +786,6 @@ export default function Home() {
       setIsAccepting(false);
     }
   };
-
 
   const currentQuestion = questions[currentQuestionIndex];
   // Calculate total questions, excluding penalty questions for the main progress
