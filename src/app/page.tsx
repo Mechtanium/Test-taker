@@ -27,7 +27,7 @@ interface Question {
   test_id: string;
   type: "MCQ" | "G_OBJ" | "SHORT" | "PARAGRAPH";
   dur_millis: number;
-  options?: QuestionOption[] | string[];
+  options?: QuestionOption[] | string[]; // Can be array of objects or strings after processing
 }
 
 interface Answer {
@@ -78,10 +78,11 @@ function sortAndGroupQuestions(questionsToSort: Question[]): Question[] {
   questionTypeOrder.forEach(type => groupedQuestions[type] = []);
 
   questionsToSort.forEach(q => {
-    const typeKey = questionTypeOrder.includes(q.type) ? q.type : 'PARAGRAPH';
+    const typeKey = questionTypeOrder.includes(q.type) ? q.type : 'PARAGRAPH'; // Default to PARAGRAPH if type is unknown
     if (groupedQuestions[typeKey]) {
       groupedQuestions[typeKey]!.push(q);
     } else {
+      // This case should ideally not be reached if typeKey is always valid
       groupedQuestions['PARAGRAPH']!.push(q);
     }
   });
@@ -172,12 +173,13 @@ export default function Home() {
     setIsWixAuthLoading(true);
     await handleAsync(async () => {
       const redirectUri = `${window.location.origin}/login-callback`;
-      const originalUriToReturnTo = window.location.href; 
+      const originalUriToReturnTo = window.location.href; // Capture the full current URL
       
+      // Create OAuthData object with state including the original URI
       const oauthData = myWixClient.auth.generateOAuthData(redirectUri, originalUriToReturnTo);
-      localStorage.setItem('oauthRedirectData', JSON.stringify(oauthData));
+      localStorage.setItem('oauthRedirectData', JSON.stringify(oauthData)); // Store the whole object
       
-      const { authUrl } = await myWixClient.auth.getAuthUrl(oauthData);
+      const { authUrl } = await myWixClient.auth.getAuthUrl(oauthData); // Pass the whole object
       window.location.href = authUrl;
     });
   }, [handleAsync]);
@@ -190,6 +192,7 @@ export default function Home() {
       setWixMember(null);
       window.location.href = logoutUrl;
     });
+    setIsWixAuthLoading(false); // Ensure loading state is reset
   }, [handleAsync]);
 
 
@@ -197,6 +200,7 @@ export default function Home() {
     let target = e.target as HTMLElement;
     let isAllowedInput = false;
 
+    // For touch events, try to get the actual element under the touch
     if (e.type.startsWith('touch') && (e as React.TouchEvent).changedTouches.length > 0) {
       const touchTarget = document.elementFromPoint(
         (e as React.TouchEvent).changedTouches[0].clientX,
@@ -205,6 +209,7 @@ export default function Home() {
       if (touchTarget) target = touchTarget as HTMLElement;
     }
     
+    // Check if the target or its parent is an input, textarea, or part of a radio group
     let parent = target;
     while (parent && parent !== document.body) {
       if (parent.tagName === 'TEXTAREA' || parent.tagName === 'INPUT' ||
@@ -216,40 +221,35 @@ export default function Home() {
       parent = parent.parentElement as HTMLElement;
     }
 
-    if (isAllowedInput && (e.type === 'paste' || action.toLowerCase() === 'paste')) {
-      e.preventDefault();
-      toast({
-        title: 'Action Disabled',
-        description: `Pasting is disabled.`,
-        variant: 'destructive',
-        duration: 2000,
-      });
+    // Specific handling for paste: prevent only if it's within the answer textarea.
+    if (action.toLowerCase() === 'paste') {
+      if (target.tagName === 'TEXTAREA' && target.getAttribute('aria-label') === 'Answer input area') {
+        e.preventDefault();
+        toast({
+          title: 'Action Disabled',
+          description: `Pasting is disabled for the answer box.`,
+          variant: 'destructive',
+          duration: 2000,
+        });
+      }
+      // Allow paste for other inputs like student email/matriculation number.
       return;
     }
     
-    if (!isAllowedInput && (e.type === 'paste' || action.toLowerCase() === 'paste')) {
+    // General prevention for copy, cut, drag, drop for the whole container,
+    // but allow if within an allowed input field.
+    if (!isAllowedInput && (e.type === 'copy' || e.type === 'cut' || e.type === 'dragstart' || e.type === 'drop')) {
       e.preventDefault();
       toast({
         title: 'Action Disabled',
-        description: `Pasting is disabled here.`,
-        variant: 'destructive',
-        duration: 2000,
-      });
-      return;
-    }
-
-    if (e.type === 'copy' || e.type === 'cut' || e.type === 'dragstart' || e.type === 'drop') {
-      e.preventDefault();
-      toast({
-        title: 'Action Disabled',
-        description: `${action}ing is disabled.`,
+        description: `${action}ing is disabled here.`,
         variant: 'destructive',
         duration: 2000,
       });
     }
   };
 
-  const submitTestResults = async (submissionStatusType: 'completed' | 'penalized', reason?: string) => {
+  const submitTestResults = useCallback(async (submissionStatusType: 'completed' | 'penalized', reason?: string) => {
     setIsSubmitting(true);
     setSubmissionStatusMessage('Submitting answers...');
     penaltyTriggeredRef.current = (submissionStatusType === 'penalized');
@@ -281,7 +281,7 @@ export default function Home() {
     console.log('Submitting test data:', submissionData);
 
     const maxRetries = 7;
-    const initialDelay = 1000;
+    const initialDelay = 1000; // 1 second
 
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
@@ -290,6 +290,7 @@ export default function Home() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(submissionData),
         });
+
         if (response.ok) {
             const responseData = await response.json();
             console.log('Submission successful via API proxy:', responseData);
@@ -301,28 +302,31 @@ export default function Home() {
                 window.parent.postMessage({ ...submissionData, type: 'testResults', details: responseData }, '*');
                 console.log(`Posted ${submissionStatusType} test submission to parent.`);
             }
-            return;
+            return; // Exit on success
         }
+        // Handle non-OK responses by throwing an error to be caught by the catch block
         const errorData = await response.text();
         throw new Error(`API submission failed with status ${response.status}: ${errorData}`);
 
       } catch (error) {
           console.error(`Submission attempt ${attempt + 1} failed:`, error);
           if (attempt === maxRetries - 1) {
+              // Last attempt failed
               setSubmissionStatusMessage(`Submission Failed. Could not submit results after ${maxRetries} attempts. ${error instanceof Error ? error.message : 'Unknown error'}`);
               toast({ title: 'Submission Error', description: `Could not submit results after ${maxRetries} attempts: ${error instanceof Error ? error.message : 'Unknown error'}`, variant: 'destructive', duration: 10000 });
               setIsSubmitting(false);
               if (window.parent !== window) {
                   window.parent.postMessage({ ...submissionData, type: 'testSubmissionError', error: error instanceof Error ? error.message : 'Unknown error' }, '*');
               }
-              return;
+              return; // Exit after last attempt
           }
-          const delay = initialDelay * Math.pow(2, attempt);
+          const delay = initialDelay * Math.pow(2, attempt); // Exponential backoff
           setSubmissionStatusMessage(`Submission attempt ${attempt + 1} failed. Retrying in ${delay / 1000}s...`);
           await new Promise(resolve => setTimeout(resolve, delay));
       }
     }
-  };
+  }, [answers, currentQuestionIndex, questions, answer, wixMember, studentEmail, matriculationNumber, toast]); // Added toast as dependency
+
 
   const handlePenalty = useCallback((reason: string) => {
     if (penaltyTriggeredRef.current || !testStarted || testFinished) return;
@@ -340,14 +344,16 @@ export default function Home() {
     }
     
     setTestFinished(true);
-    setCurrentQuestionIndex(-1); 
+    setCurrentQuestionIndex(-1); // Indicate no active question
 
+    // Submit results with 'penalized' status
     submitTestResults('penalized', reason); 
 
+    // Attempt to exit fullscreen gracefully if possible
     if (document.fullscreenElement) {
       document.exitFullscreen().catch(err => console.error("Error exiting fullscreen:", err));
     }
-  }, [answer, answers, currentQuestionIndex, questions, testStarted, testFinished, studentEmail, matriculationNumber, wixMember, toast]);
+  }, [testStarted, testFinished, toast, submitTestResults]);
 
 
   const processReceivedQuestions = useCallback((receivedQuestions: Question[]) => {
@@ -412,15 +418,18 @@ export default function Home() {
        if (event.data?.type === 'questionsLoaded') {
          const receivedData = event.data;
          if (Array.isArray(receivedData.questions)) {
+            // Transform options if they are in object format
             const transformedQuestionsFromMessage = receivedData.questions.map((q: any) => {
                 let newOptions: string[] | undefined = undefined;
                 if (q.type === "MCQ" && Array.isArray(q.options)) {
                   if (q.options.length > 0 && typeof q.options[0] === 'object' && q.options[0] !== null && 'text' in q.options[0]) {
+                    // Map from {text: string, ...}[] to string[]
                     newOptions = q.options.map((opt: any) => opt.text as string);
                   } else if (q.options.length > 0 && typeof q.options[0] === 'string') {
+                    // Already string[], use as is
                     newOptions = q.options as string[];
                   } else {
-                    newOptions = [];
+                    newOptions = []; // Empty or invalid options
                   }
                 }
                 return { ...q, options: newOptions };
@@ -451,6 +460,7 @@ export default function Home() {
     window.addEventListener('message', handleMessage);
     console.log('Message listener added.');
 
+    // Fetch data if not in iframe
     if (window.parent === window) { 
       console.log('Not in iframe, attempting to fetch questions from URL via proxy.');
       setIsLoading(true);
@@ -477,6 +487,7 @@ export default function Home() {
                 toast({ title: 'Missing Test Info', description: 'Test information could not be loaded.', variant: 'destructive'});
             }
             if (data && data.questions && Array.isArray(data.questions)) {
+              // Transform options here as well
               const transformedQuestions = data.questions.map((q: any) => {
                 let newOptions: string[] | undefined = undefined;
                 if (q.type === "MCQ" && Array.isArray(q.options)) {
@@ -504,18 +515,18 @@ export default function Home() {
                  setIsLoading(false); 
               }
             } else {
-              setQuestions([]);
+              setQuestions([]); // Ensure questions is an empty array if fetch fails or data is invalid
               console.error('Invalid data format or no questions array from proxy:', data);
               toast({ title: 'Invalid Data', description: 'Failed to parse questions from the server response via proxy.', variant: 'destructive'});
-              setIsLoading(false);
+              setIsLoading(false); // Set loading to false in case of error
             }
           })
           .catch(error => {
             console.error('Failed to fetch test data via proxy:', error);
             toast({ title: 'Fetch Error', description: `Could not load test: ${error.message}`, variant: 'destructive'});
-            setQuestions([]);
-            setTestInfo(null);
-            setIsLoading(false);
+            setQuestions([]); // Reset questions on error
+            setTestInfo(null); // Reset testInfo on error
+            setIsLoading(false); // Ensure loading is set to false
           });
       } else {
         console.log('No test ID (q parameter) found in URL.');
@@ -529,6 +540,7 @@ export default function Home() {
         setIsLoading(false);
       }
     } else {
+        // In iframe: send ready message to parent
         window.parent.postMessage('TestLockReady', '*');
         console.log('Posted TestLockReady message.');
     }
@@ -540,13 +552,15 @@ export default function Home() {
         clearInterval(timerRef.current);
       }
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [processReceivedQuestions, toast]); // isLoading removed from here, handled by testAvailabilityStatus effect
 
   useEffect(() => {
     if (!testStarted || testFinished) return;
     
-    const currentQForEffect = questions[currentQuestionIndex];
+    const currentQForEffect = questions[currentQuestionIndex]; // Get current question for this effect's scope
   
+    // Visibility Change Handler
     const handleVisibilityChange = () => {
       if (document.hidden) {
         console.log('Tab switched or window minimized.');
@@ -554,6 +568,7 @@ export default function Home() {
       }
     };
   
+    // Resize Handler
     const handleResize = () => {
       const currentHeight = window.innerHeight;
       const currentWidth = window.innerWidth;
@@ -564,7 +579,8 @@ export default function Home() {
       const isLandscape = window.matchMedia("(orientation: landscape)").matches;
       const previousOrientation = initialViewportHeightRef.current > 0 ? (initialViewportHeightRef.current < window.innerWidth) : isLandscape;
       const orientationChanged = isLandscape !== previousOrientation;
-      const likelyKeyboard = initialViewportHeightRef.current > 0 && currentHeight < initialViewportHeightRef.current;
+      // Check if the current height is significantly less than initial height (likely keyboard)
+      const likelyKeyboard = initialViewportHeightRef.current > 0 && currentHeight < initialViewportHeightRef.current * 0.85; // 15% reduction as threshold
   
       if (initialViewportHeightRef.current > 0 && !orientationChanged && !likelyKeyboard && isUnexpectedSize) {
         console.log('Significant window resize detected.');
@@ -572,19 +588,22 @@ export default function Home() {
       } else {
         if (orientationChanged) {
           console.log('Orientation change detected, ignoring resize penalty.');
-          initialViewportHeightRef.current = currentHeight;
+          initialViewportHeightRef.current = currentHeight; // Update initial height on orientation change
         }
+        // If keyboard is likely out, scroll the answer input into view
         if (likelyKeyboard && currentQForEffect) {
           console.log('Possible virtual keyboard detected, ignoring resize penalty.');
           if (currentQForEffect.type !== 'MCQ' && answerTextareaRef.current) {
             answerTextareaRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
           } else if (currentQForEffect.type === 'MCQ' && rightColumnRef.current) {
+             // For MCQs, ensure the whole right column or option group is visible
              rightColumnRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
           }
         }
       }
     };
     
+    // Fullscreen Change Handler
     const handleFullscreenChange = () => {
       if (!document.fullscreenElement) {
         console.log('Exited fullscreen mode.');
@@ -595,12 +614,13 @@ export default function Home() {
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('resize', handleResize);
     document.addEventListener('fullscreenchange', handleFullscreenChange);
-    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
-    document.addEventListener('mozfullscreenchange', handleFullscreenChange);
-    document.addEventListener('MSFullscreenChange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange); // Safari
+    document.addEventListener('mozfullscreenchange', handleFullscreenChange);    // Firefox
+    document.addEventListener('MSFullscreenChange', handleFullscreenChange);      // IE/Edge
     console.log('Security listeners (visibility, resize, fullscreen) added.');
   
-    if(testStarted) {
+    // Set initial viewport height when test starts, if not already set
+    if(testStarted && initialViewportHeightRef.current === 0) {
         initialViewportHeightRef.current = window.innerHeight;
     }
   
@@ -613,7 +633,7 @@ export default function Home() {
       document.removeEventListener('MSFullscreenChange', handleFullscreenChange);
       console.log('Security listeners (visibility, resize, fullscreen) removed.');
     };
-  }, [testStarted, testFinished, handlePenalty, questions, currentQuestionIndex]);
+  }, [testStarted, testFinished, handlePenalty, questions, currentQuestionIndex]); // Added questions and currentQuestionIndex
 
 
   const internalHandleNextQuestion = useCallback(() => {
@@ -629,10 +649,10 @@ export default function Home() {
 
       setAnswers((prevAnswers) => {
         const existingAnswerIndex = prevAnswers.findIndex(a => a.questionId === currentQuestionId);
-        if (existingAnswerIndex === -1) {
+        if (existingAnswerIndex === -1) { // New answer
           const newAnswer: Answer = { questionId: currentQuestionId, questionType: currentQuestionType, answer, timeTaken };
           return [...prevAnswers, newAnswer];
-        } else {
+        } else { // Update existing answer (e.g., if user went back or timer re-triggered save)
           const updatedAnswers = [...prevAnswers];
           updatedAnswers[existingAnswerIndex] = { questionId: currentQuestionId, questionType: currentQuestionType, answer, timeTaken };
           return updatedAnswers;
@@ -640,29 +660,32 @@ export default function Home() {
       });
     }
 
-    setAnswer('');
+    setAnswer(''); // Clear answer field for next question
 
     const nextIndex = currentQuestionIndex + 1;
 
     if (nextIndex < questions.length) {
       setCurrentQuestionIndex(nextIndex);
     } else {
+      // Check for penalty questions if all main questions are done
       if (penaltyQuestions.length > 0) {
         const nextPenalty = penaltyQuestions[0];
-        setQuestions(prev => [...prev, nextPenalty]);
-        setPenaltyQuestions(prev => prev.slice(1));
-        setCurrentQuestionIndex(nextIndex);
+        setQuestions(prev => [...prev, nextPenalty]); // Add penalty question to the main list
+        setPenaltyQuestions(prev => prev.slice(1)); // Remove from penalty queue
+        setCurrentQuestionIndex(nextIndex); // Move to the newly added penalty question
       } else {
+        // No more questions or penalties
         setTestFinished(true); 
-        setCurrentQuestionIndex(-1); 
-        submitTestResults('completed'); 
+        setCurrentQuestionIndex(-1); // Indicate no active question
+        submitTestResults('completed'); // Submit results with 'completed' status
 
+        // Attempt to exit fullscreen gracefully if possible
         if (document.fullscreenElement) {
           document.exitFullscreen().catch(err => console.error("Error exiting fullscreen:", err));
         }
       }
     }
-  }, [currentQuestionIndex, questions, answer, penaltyQuestions, studentEmail, matriculationNumber, wixMember, answers, submitTestResults]);
+  }, [currentQuestionIndex, questions, answer, penaltyQuestions, submitTestResults, answers]); // Added submitTestResults and answers to deps
 
 
   useEffect(() => {
@@ -671,7 +694,7 @@ export default function Home() {
 
   useEffect(() => {
     if (testStarted && currentQuestionIndex !== -1 && !testFinished && questions.length > 0 && currentQuestionIndex < questions.length) {
-      if (timerRef.current) {
+      if (timerRef.current) { // Clear existing timer if any
         clearInterval(timerRef.current);
       }
 
@@ -680,43 +703,45 @@ export default function Home() {
       const duration = currentQ?.dur_millis;
 
       if (typeof duration === 'number' && duration > 0) {
-        setTimeLeft(duration);
+        setTimeLeft(duration); // Set initial time for the question
 
         timerRef.current = setInterval(() => {
           const elapsed = Date.now() - startTimeRef.current;
           const newRemainingTime = duration - elapsed;
 
           if (newRemainingTime <= 0) {
-            if (timerRef.current) {
+            if (timerRef.current) { // Ensure timer exists before clearing
               clearInterval(timerRef.current);
               timerRef.current = null;
             }
-            handleNextQuestionRef.current();
+            handleNextQuestionRef.current(); // Call the ref to the latest handleNextQuestion
           } else {
             setTimeLeft(newRemainingTime);
           }
-        }, 100);
+        }, 100); // Update every 100ms for smoother countdown
       } else {
-        setTimeLeft(-1);
+        // Handle questions with no duration (e.g., infinite time)
+        setTimeLeft(-1); // Indicate infinite time
         console.warn(`Question ${currentQuestionIndex} has invalid or zero duration: ${duration}`);
       }
 
+      // Focus textarea for non-MCQ questions
       if (currentQ && currentQ.type !== 'MCQ') {
         answerTextareaRef.current?.focus();
       }
 
-    } else if (timerRef.current) {
+    } else if (timerRef.current) { // If test not started, finished, or no question, clear timer
       clearInterval(timerRef.current);
       timerRef.current = null;
     }
 
-    return () => {
+    return () => { // Cleanup function
       if (timerRef.current) {
         clearInterval(timerRef.current);
         timerRef.current = null;
       }
     };
-  }, [testStarted, currentQuestionIndex, testFinished, questions]);
+  }, [testStarted, currentQuestionIndex, testFinished, questions]); // Removed internalHandleNextQuestion from deps
 
 
   const handleAccept = async () => {
@@ -740,20 +765,21 @@ export default function Home() {
     try {
       if (document.documentElement.requestFullscreen) {
         await document.documentElement.requestFullscreen({ navigationUI: "hide" });
-      } else if ((document.documentElement as any).mozRequestFullScreen) {
+      } else if ((document.documentElement as any).mozRequestFullScreen) { /* Firefox */
         await (document.documentElement as any).mozRequestFullScreen();
-      } else if ((document.documentElement as any).webkitRequestFullscreen) {
+      } else if ((document.documentElement as any).webkitRequestFullscreen) { /* Chrome, Safari & Opera */
         await (document.documentElement as any).webkitRequestFullscreen();
-      } else if ((document.documentElement as any).msRequestFullscreen) {
+      } else if ((document.documentElement as any).msRequestFullscreen) { /* IE/Edge */
         await (document.documentElement as any).msRequestFullscreen();
       }
+      // Slight delay to ensure fullscreen mode is active before starting the test
       setTimeout(() => {
         setTestStarted(true);
-        setCurrentQuestionIndex(0);
+        setCurrentQuestionIndex(0); // Start with the first question
         setIsAccepting(false);
         console.log('Test started after fullscreen.');
-        initialViewportHeightRef.current = window.innerHeight;
-      }, 500);
+        initialViewportHeightRef.current = window.innerHeight; // Set initial height after fullscreen
+      }, 500); // Delay in ms
 
     } catch (err) {
       console.error("Fullscreen request failed:", err);
@@ -768,11 +794,12 @@ export default function Home() {
 
 
   const currentQuestion = questions[currentQuestionIndex];
+  // Calculate total questions, excluding penalty questions for the main progress
   const totalMainQuestions = questions.filter(q => !penaltyQuestions.some(pq => pq._id === q._id)).length;
-  const completedQuestions = currentQuestionIndex >= 0 ? currentQuestionIndex : 0;
+  const completedQuestions = currentQuestionIndex >= 0 ? currentQuestionIndex : 0; // Number of questions attempted or passed
 
   const formatTime = (ms: number): string => {
-    if (ms < 0) return "∞";
+    if (ms < 0) return "∞"; // For questions with no time limit
     const totalSeconds = Math.max(0, Math.floor(ms / 1000));
     const minutes = Math.floor(totalSeconds / 60);
     const seconds = totalSeconds % 60;
@@ -786,14 +813,17 @@ export default function Home() {
       waitingCardMessage = 'Checking login status...';
   } else if (!wixMember) {
       waitingCardMessage = 'Please log in using the button above to proceed.';
-  } else if (questions.length === 0 && !isLoading) {
+  } else if (questions.length === 0 && !isLoading) { // Check if questions are loaded
       waitingCardMessage = 'No test questions are currently loaded. Please wait or contact support if this persists.';
   } else if (testAvailabilityStatus === 'unavailable_early') {
-      waitingCardMessage = `The test is scheduled to start at ${testInfo?.start ? testInfo.start.substring(0,5) : 'a later time'}. Please check back then.`;
+      // This message is now handled by a separate card
+      // waitingCardMessage = `The test is scheduled to start at ${testInfo?.start ? testInfo.start.substring(0,5) : 'a later time'}. Please check back then.`;
   } else if (testAvailabilityStatus === 'unavailable_late') {
-      waitingCardMessage = `The time window for this test (until ${testInfo?.stop ? testInfo.stop.substring(0,5) : 'the cut-off time'}) has passed.`;
+      // This message is now handled by a separate card
+      // waitingCardMessage = `The time window for this test (until ${testInfo?.stop ? testInfo.stop.substring(0,5) : 'the cut-off time'}) has passed.`;
   } else if (testAvailabilityStatus === 'unavailable_no_info') {
-      waitingCardMessage = 'Test information is currently unavailable. Please try again later or contact support.';
+      // This message is now handled by a separate card
+      // waitingCardMessage = 'Test information is currently unavailable. Please try again later or contact support.';
   }
 
 
@@ -806,11 +836,13 @@ export default function Home() {
       onPaste={(e) => handleAnswerEventPrevent(e, 'Paste')}
       onDragStart={(e) => handleAnswerEventPrevent(e, 'Drag')}
       onDrop={(e) => handleAnswerEventPrevent(e, 'Drop')}
+      // onTouchStart={(e) => handleAnswerEventPrevent(e, 'Touch paste/drag')} // Example for touch, might need more specific handlers
     >
+      {/* Left Pane: Student Info & Instructions */}
       <div 
         className={cn(
           "p-4 md:p-6 border-r border-border flex flex-col space-y-6 glass overflow-y-auto", 
-          testStarted ? "hidden md:flex md:w-2/5" : "w-full md:w-2/5"
+          testStarted ? "hidden md:flex md:w-2/5" : "w-full md:w-2/5" // Hides on mobile when test started
         )}
       >
         <div className="flex justify-between items-start mb-4">
@@ -826,7 +858,7 @@ export default function Home() {
             />
         </div>
 
-        {testInfo && !testStarted && (
+        {testInfo && !testStarted && ( // Show TestInfo card only before test starts
           <Card className="mb-0 glass">
             <CardHeader className="pb-3 pt-4">
               <CardTitle className="text-xl">{testInfo.title}</CardTitle>
@@ -888,7 +920,7 @@ export default function Home() {
           </CardContent>
         </Card>
 
-        <Card className="flex-grow glass">
+        <Card className="flex-grow glass"> {/* flex-grow to take remaining space */}
           <CardHeader>
             <CardTitle>Instructions</CardTitle>
           </CardHeader>
@@ -921,46 +953,11 @@ export default function Home() {
         {isWixAuthLoading && !testStarted && <p className="text-center text-sm text-muted-foreground">Authenticating with Wix...</p>}
       </div>
 
+      {/* Right Pane: Test Area */}
       <div ref={rightColumnRef} className="w-full md:w-3/5 p-2 sm:p-4 md:p-6 flex flex-col overflow-y-auto">
-         {testAvailabilityStatus === 'unavailable_early' && !testStarted && (
-            <Card className="m-auto p-8 text-center glass">
-                <CardHeader>
-                    <CardTitle className="text-2xl">Test Unavailable</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <CardDescription>
-                        The test is scheduled to start at {testInfo?.start ? testInfo.start.substring(0,5) : 'a later time'}. Please check back then.
-                    </CardDescription>
-                </CardContent>
-            </Card>
-        )}
-        {testAvailabilityStatus === 'unavailable_late' && !testStarted && (
-            <Card className="m-auto p-8 text-center glass">
-                <CardHeader>
-                    <CardTitle className="text-2xl">Test Unavailable</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <CardDescription>
-                        The time window for this test (until {testInfo?.stop ? testInfo.stop.substring(0,5) : 'the cut-off time'}) has passed.
-                    </CardDescription>
-                </CardContent>
-            </Card>
-        )}
-        {testAvailabilityStatus === 'unavailable_no_info' && !testStarted && !isLoading && (
-             <Card className="m-auto p-8 text-center glass">
-                <CardHeader>
-                    <CardTitle className="text-2xl">Test Information Unavailable</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <CardDescription>
-                        Could not load test schedule information. Please try again later or check the test ID.
-                    </CardDescription>
-                </CardContent>
-            </Card>
-        )}
-
         {testStarted && !testFinished && !isSubmitting && currentQuestion ? (
-          <div className="flex flex-col space-y-4 fade-in">
+          <div className="flex flex-col space-y-4 fade-in"> {/* Main content wrapper for active test */}
+            {/* Progress and Timer Section */}
             <div className="mb-4 glass p-4 rounded-lg">
               <div className="flex flex-col sm:flex-row justify-between items-center mb-3">
                 <p className="text-lg font-semibold text-foreground mb-2 sm:mb-0">
@@ -971,11 +968,12 @@ export default function Home() {
                   {formatTime(_timeLeft)}
                 </div>
               </div>
+              {/* Progress Bars for Question Types */}
               <div className="space-y-2">
                 {questionTypeOrder.map(type => {
                   const questionsOfType = questions.filter(q => q.type === type && !penaltyQuestions.some(pq => pq._id === q._id));
                   const totalOfType = questionsOfType.length;
-                  if (totalOfType === 0) return null;
+                  if (totalOfType === 0) return null; // Don't show progress for types not in the test
 
                   const answeredOfType = answers.filter(ans => {
                     const q = questions.find(q_ => q_._id === ans.questionId);
@@ -997,17 +995,19 @@ export default function Home() {
               </div>
             </div>
 
-            <Card className="flex flex-col glass">
+            {/* Question Display Card */}
+            <Card className="flex flex-col glass"> {/* Removed flex-grow and min-h-0 */}
               <CardHeader>
                 <CardTitle>Question {completedQuestions + 1}</CardTitle>
               </CardHeader>
-              <CardContent className="flex flex-col space-y-4">
+              <CardContent className="flex flex-col space-y-4"> {/* Removed flex-grow and min-h-0 */}
                 <div
-                  className="p-4 border border-border rounded-md bg-white/50 dark:bg-black/20 overflow-auto min-h-[8.75rem] max-h-[17.5rem]"
+                  className="p-4 border border-border rounded-md bg-white/50 dark:bg-black/20 overflow-auto min-h-[8.75rem] max-h-[17.5rem]" // Dynamic height with min/max
                 >
                   <p className="text-lg whitespace-pre-wrap break-words">{currentQuestion.query}</p>
                 </div>
 
+                {/* Answer Input: MCQ or Textarea */}
                 {currentQuestion.type === 'MCQ' && Array.isArray(currentQuestion.options) ? (
                   <RadioGroup
                     value={answer}
@@ -1030,10 +1030,12 @@ export default function Home() {
                     value={answer}
                     onChange={(e) => setAnswer(e.target.value)}
                      onFocus={(e) => {
-                        if (window.visualViewport && window.innerWidth < 768) {
+                        // Try to scroll the textarea into a more central position if keyboard likely up
+                        if (window.visualViewport && window.innerWidth < 768) { // Check for mobile-like viewport
                              const targetRect = e.target.getBoundingClientRect();
                              const viewportHeight = window.visualViewport?.height || window.innerHeight;
-                             if (targetRect.bottom > viewportHeight - 50) { 
+                             // If bottom of textarea is close to or below viewport bottom, scroll it
+                             if (targetRect.bottom > viewportHeight - 50) { // 50px buffer
                                  e.target.scrollIntoView({ behavior: 'smooth', block: 'center' });
                              }
                         }
@@ -1044,12 +1046,14 @@ export default function Home() {
                     onDragStart={(e) => handleAnswerEventPrevent(e, 'Drag')}
                     onDrop={(e) => handleAnswerEventPrevent(e, 'Drop')}
                     onTouchStart={(e: React.TouchEvent<HTMLTextAreaElement>) => {
+                      // This is a placeholder for more complex touch paste prevention if needed.
+                      // For now, relying on onPaste which usually covers modern mobile browsers.
                       const touchStartTime = Date.now();
                       const targetElement = e.target as HTMLTextAreaElement;
                       const touchendHandler = () => {
                         const touchEndTime = Date.now();
-                        if (touchEndTime - touchStartTime > 500) {
-                          // Long press detected
+                        if (touchEndTime - touchStartTime > 500) { // Example: Long press
+                          // Potentially handle long press if it's used to trigger paste context menu
                         }
                         targetElement.removeEventListener('touchend', touchendHandler);
                       };
@@ -1065,7 +1069,7 @@ export default function Home() {
             <Button
               onClick={handleNextQuestionRef.current}
               className="w-full md:w-auto self-end bg-accent text-accent-foreground hover:bg-accent/90 py-3 px-6 mt-4"
-              disabled={currentQuestionIndex >= questions.length && penaltyQuestions.length === 0}
+              disabled={currentQuestionIndex >= questions.length && penaltyQuestions.length === 0} // Disable if no more questions and no penalties
             >
               {currentQuestionIndex < questions.length - 1 || penaltyQuestions.length > 0 ? 'Submit Answer & Next' : 'Submit Final Answer'}
             </Button>
@@ -1094,7 +1098,40 @@ export default function Home() {
               <p className="mt-4">You may now close this window.</p>
             </CardContent>
           </Card>
-        ) : (testAvailabilityStatus === 'available' || testAvailabilityStatus === 'loading') && (
+        ) : testAvailabilityStatus === 'unavailable_early' ? (
+            <Card className="m-auto p-8 text-center glass">
+                <CardHeader>
+                    <CardTitle className="text-2xl">Test Unavailable</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <CardDescription>
+                        The test is scheduled to start at {testInfo?.start ? testInfo.start.substring(0,5) : 'a later time'}. Please check back then.
+                    </CardDescription>
+                </CardContent>
+            </Card>
+        ) : testAvailabilityStatus === 'unavailable_late' ? (
+            <Card className="m-auto p-8 text-center glass">
+                <CardHeader>
+                    <CardTitle className="text-2xl">Test Unavailable</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <CardDescription>
+                        The time window for this test (until {testInfo?.stop ? testInfo.stop.substring(0,5) : 'the cut-off time'}) has passed.
+                    </CardDescription>
+                </CardContent>
+            </Card>
+        ) : testAvailabilityStatus === 'unavailable_no_info' && !isLoading ? (
+             <Card className="m-auto p-8 text-center glass">
+                <CardHeader>
+                    <CardTitle className="text-2xl">Test Information Unavailable</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <CardDescription>
+                        Could not load test schedule information. Please try again later or check the test ID.
+                    </CardDescription>
+                </CardContent>
+            </Card>
+        ) : ( // Default to "Waiting to Start" or loading states
           <Card className="m-auto p-8 text-center glass">
             <CardHeader>
               <CardTitle className="text-2xl">Waiting to Start</CardTitle>
@@ -1113,3 +1150,4 @@ export default function Home() {
     </div>
   );
 }
+
