@@ -2,7 +2,7 @@
 'use client';
 
 import React from 'react';
-import type { Member } from '@wix/members';
+import type { Member } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { LogIn, LogOut, UserCircle2 } from 'lucide-react';
 
@@ -15,7 +15,7 @@ interface LoginBarProps {
 
 const LoginBar: React.FC<LoginBarProps> = ({ member, onLogin, onLogout, isLoading }) => {
   const isLoggedIn = !!member;
-  const displayName = member?.profile?.nickname || member?.contact?.firstName || 'User';
+  const displayName = `Hi, ${member?.profile?.nickname?.split(' ')[0] || member?.contact?.firstName || 'User'}`;
 
   return (
     <div className="flex items-center space-x-2">
@@ -36,8 +36,7 @@ const LoginBar: React.FC<LoginBarProps> = ({ member, onLogin, onLogout, isLoadin
           'Processing...'
         ) : isLoggedIn ? (
           <>
-            <LogOut className="mr-1 h-3 w-3" /> Logout
-          </>
+            <LogOut className="mr-1 h-3 w-3" /></>
         ) : (
           <>
             <LogIn className="mr-1 h-3 w-3" /> Login
