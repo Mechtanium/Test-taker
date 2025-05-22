@@ -10,7 +10,7 @@ import { Progress } from '@/components/ui/progress';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, MapPin } from 'lucide-react'; // Added MapPin
+import { Loader2, MapPin } from 'lucide-react';
 import AnnahAiLogo from '@/components/annah-ai-logo';
 import LoginBar from '@/components/LoginBar';
 import { myWixClient, removeTokensFromCookie } from '@/lib/wix-client';
@@ -20,8 +20,6 @@ import { cn } from '@/lib/utils';
 
 interface QuestionOption {
   text: string;
-  // key?: string; // Optional, if needed from API
-  // _id?: string; // Optional, if needed from API
 }
 interface Question {
   _id: string;
@@ -29,22 +27,22 @@ interface Question {
   test_id: string;
   type: "MCQ" | "G_OBJ" | "SHORT" | "PARAGRAPH";
   dur_millis: number;
-  options?: QuestionOption[] | string[]; // Can be array of objects or strings after transformation
+  options?: QuestionOption[] | string[];
 }
 
 interface Answer {
   questionId: string;
   questionType: Question['type'];
   answer: string;
-  timeTaken: number; // in milliseconds
+  timeTaken: number;
 }
 
 interface TestInfo {
   _id: string;
   title: string;
-  start: string;
-  stop: string;
-  date: string;
+  start: string; // HH:MM:SS.sss
+  stop: string;  // HH:MM:SS.sss (late start)
+  date: string;  // YYYY-MM-DD or full ISO
   instructions?: string;
   banner?: string;
   geolocation?: {
@@ -52,10 +50,11 @@ interface TestInfo {
     longitude: number;
     description?: string;
   };
-  // Add any other relevant fields from test_info if needed
   attempts?: number;
   course_id?: string;
 }
+
+type TestAvailabilityStatus = 'loading' | 'available' | 'unavailable_early' | 'unavailable_late' | 'unavailable_no_info';
 
 
 const questionTypeOrder: Question['type'][] = ["MCQ", "G_OBJ", "SHORT", "PARAGRAPH"];
@@ -79,11 +78,10 @@ function sortAndGroupQuestions(questionsToSort: Question[]): Question[] {
   questionTypeOrder.forEach(type => groupedQuestions[type] = []);
 
   questionsToSort.forEach(q => {
-    const typeKey = questionTypeOrder.includes(q.type) ? q.type : 'PARAGRAPH'; // Default unknown types to PARAGRAPH
+    const typeKey = questionTypeOrder.includes(q.type) ? q.type : 'PARAGRAPH';
     if (groupedQuestions[typeKey]) {
       groupedQuestions[typeKey]!.push(q);
     } else {
-      // Fallback for very unexpected types, though handled by defaulting typeKey
       groupedQuestions['PARAGRAPH']!.push(q);
     }
   });
@@ -95,6 +93,26 @@ function sortAndGroupQuestions(questionsToSort: Question[]): Question[] {
     }
   });
   return sortedAndShuffledQuestions;
+}
+
+// Helper function to create Date objects
+function createDateTime(dateString: string | undefined, timeString: string): Date | null {
+  if (!timeString) return null;
+
+  const today = new Date();
+  const year = dateString ? new Date(dateString).getFullYear() : today.getFullYear();
+  const month = dateString ? new Date(dateString).getMonth() : today.getMonth();
+  const day = dateString ? new Date(dateString).getDate() : today.getDate();
+
+  const [hours, minutes, secondsPart] = timeString.split(':');
+  const seconds = secondsPart ? parseInt(secondsPart.split('.')[0], 10) : 0;
+
+  if (isNaN(year) || isNaN(month) || isNaN(day) || isNaN(parseInt(hours,10)) || isNaN(parseInt(minutes,10)) || isNaN(seconds)) {
+    console.error("Invalid date/time input for createDateTime", { dateString, timeString});
+    return null;
+  }
+  
+  return new Date(year, month, day, parseInt(hours, 10), parseInt(minutes, 10), seconds);
 }
 
 
@@ -117,6 +135,7 @@ export default function Home() {
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [submissionStatusMessage, setSubmissionStatusMessage] = useState<string>('');
   const [testInfo, setTestInfo] = useState<TestInfo | null>(null);
+  const [testAvailabilityStatus, setTestAvailabilityStatus] = useState<TestAvailabilityStatus>('loading');
 
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
@@ -161,7 +180,6 @@ export default function Home() {
       const { authUrl } = await myWixClient.auth.getAuthUrl(oauthData);
       window.location.href = authUrl;
     });
-    // setIsWixAuthLoading(false); // Not strictly necessary
   }, [handleAsync]);
 
   const handleWixLogout = useCallback(async () => {
@@ -172,7 +190,6 @@ export default function Home() {
       setWixMember(null);
       window.location.href = logoutUrl;
     });
-    // setIsWixAuthLoading(false); // Not strictly necessary
   }, [handleAsync]);
 
 
@@ -235,7 +252,7 @@ export default function Home() {
   const submitTestResults = async (submissionStatusType: 'completed' | 'penalized', reason?: string) => {
     setIsSubmitting(true);
     setSubmissionStatusMessage('Submitting answers...');
-    penaltyTriggeredRef.current = (submissionStatusType === 'penalized'); // Ensure penaltyTriggeredRef reflects current submission
+    penaltyTriggeredRef.current = (submissionStatusType === 'penalized');
 
     const currentQuestionId = (currentQuestionIndex >= 0 && currentQuestionIndex < questions.length) ? questions[currentQuestionIndex]._id : null;
     const currentQuestionType = (currentQuestionIndex >= 0 && currentQuestionIndex < questions.length) ? questions[currentQuestionIndex].type : undefined;
@@ -264,7 +281,7 @@ export default function Home() {
     console.log('Submitting test data:', submissionData);
 
     const maxRetries = 7;
-    const initialDelay = 1000; // 1 second
+    const initialDelay = 1000;
 
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
@@ -284,7 +301,7 @@ export default function Home() {
                 window.parent.postMessage({ ...submissionData, type: 'testResults', details: responseData }, '*');
                 console.log(`Posted ${submissionStatusType} test submission to parent.`);
             }
-            return; // Exit after successful submission
+            return;
         }
         const errorData = await response.text();
         throw new Error(`API submission failed with status ${response.status}: ${errorData}`);
@@ -298,7 +315,7 @@ export default function Home() {
               if (window.parent !== window) {
                   window.parent.postMessage({ ...submissionData, type: 'testSubmissionError', error: error instanceof Error ? error.message : 'Unknown error' }, '*');
               }
-              return; // Exit after all retries failed
+              return;
           }
           const delay = initialDelay * Math.pow(2, attempt);
           setSubmissionStatusMessage(`Submission attempt ${attempt + 1} failed. Retrying in ${delay / 1000}s...`);
@@ -330,17 +347,65 @@ export default function Home() {
     if (document.fullscreenElement) {
       document.exitFullscreen().catch(err => console.error("Error exiting fullscreen:", err));
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [answer, answers, currentQuestionIndex, questions, testStarted, testFinished, studentEmail, matriculationNumber, wixMember, toast]);
 
 
   const processReceivedQuestions = useCallback((receivedQuestions: Question[]) => {
     const processed = sortAndGroupQuestions(receivedQuestions);
     setQuestions(processed);
-    setIsLoading(false);
+    setIsLoading(false); // Set loading to false once questions are processed
     console.log('Processed and sorted questions:', processed);
   }, []);
 
+  useEffect(() => {
+    if (isLoading && testInfo) { // Only check availability if testInfo is loaded
+        const currentTime = new Date();
+        
+        if (!testInfo.start) {
+            console.log("Test start time is not available. Assuming test is available.");
+            setTestAvailabilityStatus('available');
+            return;
+        }
+
+        const testStartDateTime = createDateTime(testInfo.date, testInfo.start);
+
+        if (!testStartDateTime) {
+            console.error("Could not parse test start date/time. Assuming test is unavailable.");
+            setTestAvailabilityStatus('unavailable_no_info'); // Or handle as error
+            return;
+        }
+
+        if (testInfo.stop) { // late start time exists
+            const testStopDateTime = createDateTime(testInfo.date, testInfo.stop);
+            if (!testStopDateTime) {
+                console.error("Could not parse test stop date/time. Checking only against start time.");
+                 if (currentTime < testStartDateTime) {
+                    setTestAvailabilityStatus('unavailable_early');
+                } else {
+                    setTestAvailabilityStatus('available');
+                }
+                return;
+            }
+
+            if (currentTime < testStartDateTime) {
+                setTestAvailabilityStatus('unavailable_early');
+            } else if (currentTime > testStopDateTime) {
+                setTestAvailabilityStatus('unavailable_late');
+            } else {
+                setTestAvailabilityStatus('available');
+            }
+        } else { // No late start time, only check start time
+            if (currentTime < testStartDateTime) {
+                setTestAvailabilityStatus('unavailable_early');
+            } else {
+                setTestAvailabilityStatus('available');
+            }
+        }
+    } else if (!testInfo && !isLoading) { // No test info and not loading
+        setTestAvailabilityStatus('unavailable_no_info');
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [testInfo, isLoading]); // Re-run when testInfo or isLoading changes
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
@@ -376,6 +441,7 @@ export default function Home() {
          }
          if (receivedData.test_info) {
             setTestInfo(receivedData.test_info as TestInfo);
+            // setIsLoading(false) is handled by processReceivedQuestions or error paths
          }
       } else if (event.data === 'TestLockReady') {
         console.log('Parent window acknowledged TestLockReady.');
@@ -388,6 +454,7 @@ export default function Home() {
     if (window.parent === window) { 
       console.log('Not in iframe, attempting to fetch questions from URL via proxy.');
       setIsLoading(true);
+      setTestAvailabilityStatus('loading'); // Set initial availability status
       const queryParams = new URLSearchParams(window.location.search);
       const testId = queryParams.get('q');
 
@@ -405,6 +472,9 @@ export default function Home() {
             console.log('Fetched data via proxy:', data);
             if (data && data.test_info) {
                 setTestInfo(data.test_info as TestInfo);
+            } else {
+                setTestInfo(null); // Explicitly set to null if not present
+                toast({ title: 'Missing Test Info', description: 'Test information could not be loaded.', variant: 'destructive'});
             }
             if (data && data.questions && Array.isArray(data.questions)) {
               const transformedQuestions = data.questions.map((q: any) => {
@@ -444,6 +514,7 @@ export default function Home() {
             console.error('Failed to fetch test data via proxy:', error);
             toast({ title: 'Fetch Error', description: `Could not load test: ${error.message}`, variant: 'destructive'});
             setQuestions([]);
+            setTestInfo(null);
             setIsLoading(false);
           });
       } else {
@@ -454,6 +525,7 @@ export default function Home() {
           variant: 'destructive'
         });
         setQuestions([]);
+        setTestInfo(null);
         setIsLoading(false);
       }
     } else {
@@ -468,7 +540,7 @@ export default function Home() {
         clearInterval(timerRef.current);
       }
     };
-  }, [processReceivedQuestions, toast]);
+  }, [processReceivedQuestions, toast]); // isLoading removed from here, handled by testAvailabilityStatus effect
 
   useEffect(() => {
     if (!testStarted || testFinished) return;
@@ -590,8 +662,7 @@ export default function Home() {
         }
       }
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentQuestionIndex, questions, answer, penaltyQuestions, studentEmail, matriculationNumber, wixMember, answers]);
+  }, [currentQuestionIndex, questions, answer, penaltyQuestions, studentEmail, matriculationNumber, wixMember, answers, submitTestResults]);
 
 
   useEffect(() => {
@@ -708,6 +779,24 @@ export default function Home() {
     return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
   };
 
+  let waitingCardMessage = 'Please read the instructions and click "Accept & Start Test" when ready.';
+  if (isLoading || testAvailabilityStatus === 'loading') {
+      waitingCardMessage = 'Loading test questions and checking availability...';
+  } else if (isWixAuthLoading) {
+      waitingCardMessage = 'Checking login status...';
+  } else if (!wixMember) {
+      waitingCardMessage = 'Please log in using the button above to proceed.';
+  } else if (questions.length === 0 && !isLoading) {
+      waitingCardMessage = 'No test questions are currently loaded. Please wait or contact support if this persists.';
+  } else if (testAvailabilityStatus === 'unavailable_early') {
+      waitingCardMessage = `The test is scheduled to start at ${testInfo?.start ? testInfo.start.substring(0,5) : 'a later time'}. Please check back then.`;
+  } else if (testAvailabilityStatus === 'unavailable_late') {
+      waitingCardMessage = `The time window for this test (until ${testInfo?.stop ? testInfo.stop.substring(0,5) : 'the cut-off time'}) has passed.`;
+  } else if (testAvailabilityStatus === 'unavailable_no_info') {
+      waitingCardMessage = 'Test information is currently unavailable. Please try again later or contact support.';
+  }
+
+
   return (
     <div
       ref={containerRef}
@@ -738,18 +827,18 @@ export default function Home() {
         </div>
 
         {testInfo && !testStarted && (
-          <Card className="mb-0 glass"> {/* Reduced mb-6 to mb-0 or small value if needed */}
-            <CardHeader className="pb-3 pt-4"> {/* Adjusted padding */}
-              <CardTitle className="text-xl">{testInfo.title}</CardTitle> {/* Slightly smaller title if needed */}
+          <Card className="mb-0 glass">
+            <CardHeader className="pb-3 pt-4">
+              <CardTitle className="text-xl">{testInfo.title}</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3 pt-0 pb-4"> {/* Adjusted padding and spacing */}
+            <CardContent className="space-y-3 pt-0 pb-4">
               <div className="flex justify-between items-center text-sm">
                 <div>
                   <p className="text-xs text-muted-foreground">Start Time</p>
                   <p className="font-semibold text-accent">{testInfo.start?.substring(0, 5)}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground text-right">End Time</p>
+                  <p className="text-xs text-muted-foreground text-right">Late Start</p>
                   <p className="font-semibold text-destructive">{testInfo.stop?.substring(0, 5)}</p>
                 </div>
               </div>
@@ -818,13 +907,14 @@ export default function Home() {
         {!testStarted && !isLoading && !testFinished && !isSubmitting && (
           <Button
             onClick={handleAccept}
-            disabled={isLoading || isAccepting || questions.length === 0 || !wixMember || isWixAuthLoading} 
+            disabled={isLoading || isAccepting || questions.length === 0 || !wixMember || isWixAuthLoading || testAvailabilityStatus !== 'available'} 
             className="w-full bg-accent text-accent-foreground hover:bg-accent/90 text-lg py-3"
           >
             {isAccepting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
             {isAccepting ? 'Entering Fullscreen...' : 
              !wixMember && !isWixAuthLoading ? 'Please Login to Start' :
-             (questions.length === 0 && !isLoading ? 'No Test Loaded' : 'Accept & Start Test')}
+             (questions.length === 0 && !isLoading ? 'No Test Loaded' : 
+             (testAvailabilityStatus !== 'available' ? 'Test Not Currently Available' : 'Accept & Start Test'))}
           </Button>
         )}
         {isLoading && !testFinished && <p className="text-center">Loading test...</p>}
@@ -832,6 +922,43 @@ export default function Home() {
       </div>
 
       <div ref={rightColumnRef} className="w-full md:w-3/5 p-2 sm:p-4 md:p-6 flex flex-col overflow-y-auto">
+         {testAvailabilityStatus === 'unavailable_early' && !testStarted && (
+            <Card className="m-auto p-8 text-center glass">
+                <CardHeader>
+                    <CardTitle className="text-2xl">Test Unavailable</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <CardDescription>
+                        The test is scheduled to start at {testInfo?.start ? testInfo.start.substring(0,5) : 'a later time'}. Please check back then.
+                    </CardDescription>
+                </CardContent>
+            </Card>
+        )}
+        {testAvailabilityStatus === 'unavailable_late' && !testStarted && (
+            <Card className="m-auto p-8 text-center glass">
+                <CardHeader>
+                    <CardTitle className="text-2xl">Test Unavailable</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <CardDescription>
+                        The time window for this test (until {testInfo?.stop ? testInfo.stop.substring(0,5) : 'the cut-off time'}) has passed.
+                    </CardDescription>
+                </CardContent>
+            </Card>
+        )}
+        {testAvailabilityStatus === 'unavailable_no_info' && !testStarted && !isLoading && (
+             <Card className="m-auto p-8 text-center glass">
+                <CardHeader>
+                    <CardTitle className="text-2xl">Test Information Unavailable</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <CardDescription>
+                        Could not load test schedule information. Please try again later or check the test ID.
+                    </CardDescription>
+                </CardContent>
+            </Card>
+        )}
+
         {testStarted && !testFinished && !isSubmitting && currentQuestion ? (
           <div className="flex flex-col space-y-4 fade-in">
             <div className="mb-4 glass p-4 rounded-lg">
@@ -967,20 +1094,18 @@ export default function Home() {
               <p className="mt-4">You may now close this window.</p>
             </CardContent>
           </Card>
-        ) : (
+        ) : (testAvailabilityStatus === 'available' || testAvailabilityStatus === 'loading') && (
           <Card className="m-auto p-8 text-center glass">
             <CardHeader>
               <CardTitle className="text-2xl">Waiting to Start</CardTitle>
             </CardHeader>
             <CardContent>
               <CardDescription>
-                {isLoading
-                  ? 'Loading test questions...'
-                  : (wixMember === undefined ? 'Checking login status...' :
-                    !wixMember ? 'Please log in using the button above to proceed.' :
-                    (questions.length === 0 ? 'No test questions are currently loaded. Please wait or contact support if this persists.' : 'Please read the instructions and click "Accept & Start Test" when ready.'))}
+                {waitingCardMessage}
               </CardDescription>
-              {(isLoading || (wixMember === undefined && !isWixAuthLoading)) && <Loader2 className="mt-4 h-8 w-8 animate-spin mx-auto text-muted-foreground" />}
+              {(isLoading || (wixMember === undefined && !isWixAuthLoading) || testAvailabilityStatus === 'loading') && 
+                <Loader2 className="mt-4 h-8 w-8 animate-spin mx-auto text-muted-foreground" />
+              }
             </CardContent>
           </Card>
         )}
@@ -988,4 +1113,3 @@ export default function Home() {
     </div>
   );
 }
-
