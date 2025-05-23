@@ -1,4 +1,5 @@
 import request from 'supertest';
+import { DEV_MODE } from '@/lib/utils';
 
 // The baseURL should point to your running Next.js development server
 const baseURL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:9002';
@@ -30,7 +31,7 @@ describe('GET /api/test-proxy', () => {
     
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(fetch).toHaveBeenCalledWith(
-      'https://sapiensng.wixsite.com/annah-ai/_functions-dev/test?test=some-test-id',
+      `https://sapiensng.wixsite.com/annah-ai/_functions${DEV_MODE ? "-dev" : ""}/test?test=some-test-id`,
       expect.any(Object) // You can be more specific with headers if needed
     );
     expect(response.status).toBe(200);

@@ -1,7 +1,7 @@
 
 import { type NextRequest, NextResponse } from 'next/server';
-
-const EXTERNAL_COUNT_API_ENDPOINT = "https://sapiensng.wixsite.com/annah-ai/_functions-dev/count_assessments";
+import { DEV_MODE } from '@/lib/utils';
+const EXTERNAL_COUNT_API_ENDPOINT = `https://sapiensng.wixsite.com/annah-ai/_functions${DEV_MODE ? "-dev" : ""}/count_assessments`;
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;

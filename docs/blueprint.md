@@ -13,7 +13,7 @@
 *   **Test Data Handling**:
     *   **Dynamic Test Loading**:
         *   **Parent Frame Communication**: Can receive test questions and test information (title, instructions, timing, geolocation) via `window.postMessage` when embedded in an iframe.
-        *   **Direct API Fetch (Standalone Mode)**: When not in an iframe, fetches test questions and information from an external API (`https://sapiensng.wixsite.com/annah-ai/_functions-dev/test`) via a Next.js proxy route (`/api/test-proxy`). Requires a `q` URL query parameter for the test ID.
+        *   **Direct API Fetch (Standalone Mode)**: When not in an iframe, fetches test questions and information from an external API (`https://sapiensng.wixsite.com/annah-ai/_functions/test`) via a Next.js proxy route (`/api/test-proxy`). Requires a `q` URL query parameter for the test ID.
     *   **Test Availability Check**:
         *   Verifies if the current system time is within the test's scheduled `start` time and `stop` (late start) time, based on `test_info.date`.
         *   Displays "Test Unavailable" messages if the current time is outside this window (too early or too late).
@@ -27,7 +27,7 @@
     *   **Progress Display**: Shows progress bars for each question type ("MCQ", "G_OBJ", "SHORT", "PARAGRAPH"), indicating the number of answered questions versus the total for that type.
     *   **Auto-Focus**: Automatically focuses the answer textarea for non-MCQ questions when a new question is displayed.
 *   **Submission**:
-    *   **Secure Submission**: Submits captured answers, student information, Wix Member ID (`_owner`), test ID, and status ("completed" or "penalized") to an external API (`https://sapiensng.wixsite.com/annah-ai/_functions-dev/save_assessment`) via a Next.js proxy route (`/api/submit-assessment`).
+    *   **Secure Submission**: Submits captured answers, student information, Wix Member ID (`_owner`), test ID, and status ("completed" or "penalized") to an external API (`https://sapiensng.wixsite.com/annah-ai/_functions/save_assessment`) via a Next.js proxy route (`/api/submit-assessment`).
     *   **Retry Mechanism**: Implements an exponential backoff strategy (up to 7 retries) for submission attempts. An error toast is shown only after all retries fail.
     *   **Parent Frame Notification**: Posts submission results/errors to the parent window if embedded in an iframe.
 *   **UI & User Experience**:

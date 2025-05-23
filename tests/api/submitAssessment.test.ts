@@ -1,4 +1,5 @@
 import request from 'supertest';
+import { DEV_MODE } from '@/lib/utils';
 
 const baseURL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:9002';
 
@@ -35,7 +36,7 @@ describe('POST /api/submit-assessment', () => {
 
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(fetch).toHaveBeenCalledWith(
-      "https://sapiensng.wixsite.com/annah-ai/_functions-dev/save_assessment",
+      `https://sapiensng.wixsite.com/annah-ai/_functions${DEV_MODE ? "-dev": ""}/save_assessment`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

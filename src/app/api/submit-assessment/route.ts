@@ -1,7 +1,8 @@
 
 import { type NextRequest, NextResponse } from 'next/server';
+import { DEV_MODE } from '@/lib/utils';
 
-const EXTERNAL_SUBMISSION_API_ENDPOINT = "https://sapiensng.wixsite.com/annah-ai/_functions-dev/save_assessment";
+const EXTERNAL_SUBMISSION_API_ENDPOINT = `https://sapiensng.wixsite.com/annah-ai/_functions${DEV_MODE ? "-dev" : ""}/save_assessment`;
 
 export async function POST(request: NextRequest) {
   try {

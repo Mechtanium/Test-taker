@@ -1,5 +1,6 @@
 
 import { type NextRequest, NextResponse } from 'next/server';
+import { DEV_MODE } from '@/lib/utils';
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
@@ -9,7 +10,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Test ID is required' }, { status: 400 });
   }
 
-  const externalApiUrl = `https://sapiensng.wixsite.com/annah-ai/_functions-dev/test?test=${testId}`;
+  const externalApiUrl = `https://sapiensng.wixsite.com/annah-ai/_functions${DEV_MODE ? "-dev" : ""}/test?test=${testId}`;
 
   try {
     const response = await fetch(externalApiUrl, {
